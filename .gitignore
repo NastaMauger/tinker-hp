@@ -1,0 +1,8 @@
+*.o
+*.a
+*.arc
+*.dyn
+*.dcd
+bin/
+test
+
