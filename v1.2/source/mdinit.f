@@ -46,8 +46,8 @@ c
       use replicas
 #ifdef PLUMED
       use plumed
-      use mpi
 #endif
+      use mpi
       use math, only:pi
       use spectra
       implicit none
@@ -74,6 +74,9 @@ c
        real*8 temper
        end function
       end interface
+c
+      if (deb_Path) write(iout,*), 'mdinit '
+c
 c
 c     set default parameters for the dynamics trajectory
 c
@@ -304,14 +307,18 @@ c
 c     lambda-dynamics not compatible with pmecore
 c
         if (use_pmecore) then
-          if (rank.eq.0) then
+          if (ranktot.eq.0) then
             write(iout,*) 'Lambda-dynamics not compatible with',
      $      'separate cores for PME'
           end if
-          call MPI_BARRIER(COMM_TINKER,ierr)
+          call MPI_BARRIER(MPI_COMM_WORLD,ierr)
           call fatal
         end if
-        call def_lambdadyn_init
+        if (path_integral_md) then
+            call def_lambdadyn_init(ranktot)
+        else
+            call def_lambdadyn_init(rank)
+        endif
       end if
 c
 c     enforce the use of monte-carlo barostat with the TCG family of solvers
@@ -480,6 +487,15 @@ c
          write (iout,60)
    60    format (/,' MDINIT  --  No Degrees of Freedom for Dynamics')
          call fatal
+      end if
+
+      if (tinkerdebug.gt.0.and.rank.eq.0) call info_dyn
+c
+c     Info Unwraping
+c
+      if (verbose.and.ranktot.eq.0.and.pbcunwrap) then
+ 26      format(" --- Tinker-HP: Unwrapped Sampling Enabled ")     
+         write(*,26)
       end if
 c
 c     try to restart using prior velocities and accelerations

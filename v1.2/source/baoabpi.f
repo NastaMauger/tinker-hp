@@ -55,6 +55,9 @@ c
       integer :: iloc
       integer :: ibeadbeg
       logical :: only_long
+c
+      if (deb_Path) write(iout,*), 'baoabpi '
+c
 
       dt2=0.5d0*dt
       sqrtnu=sqrt(real(nbeads,8))
@@ -147,6 +150,7 @@ c
       endif
 
       call set_eigforces_pi(polymer,polymer%forces)
+      call centroid_force_corrections(polymer)
       call apply_B_PI(polymer,dt2)
       if(PITIMER) call stopwatchpi(timeaoa,.false.,.false.)
 

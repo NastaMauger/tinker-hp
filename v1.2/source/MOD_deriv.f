@@ -84,6 +84,13 @@ c
       real*8, allocatable  :: dxdelambda(:,:)
       real*8, allocatable :: dxdelambdae(:,:), dxdelambdav(:,:)
       logical dotstgrad
+      logical abortall
+      integer inte(2)
+      integer cBond,cNBond,cSNBond,cDef
+      enum,bind(C)
+      enumerator idBond,idSNBond,idNBond
+      end enum
+      parameter( cBond=1,cSNBond=2,cNBond=4,cDef=5 )
       save
 
       contains
@@ -95,5 +102,98 @@ c
         if(allocated(deprec)) deprec = 0.0d0
         if(allocated(dedsprec)) dedsprec = 0.0d0
       end subroutine resetForcesRec
+
+
+      subroutine minmaxone1( mi,ma,on,vector,sz,name )
+      use atoms
+      use domdec
+      use inform
+      use mpi
+      implicit none
+      integer sz
+      integer,parameter::lgli=10
+      real(8) mi,ma,on
+      real*8 vector(*)
+      character(*),optional,intent(in)::name
+      integer i,j,i1,i2,iglob,cap,cap1,cap2
+      integer gli(lgli,nproc)
+      real(8) val
+
+      abortall = .false.
+      if (present(name)) then
+         cap = 1
+         gli = 0
+         if (name.eq.'devi') then
+            do i = 1, sz/3
+               cap2  = 0
+               iglob = glob(i)
+               do j  = 1,3
+               val   = vector((i-1)*3+j)
+               if (abs(val).gt.90.0) then
+                  print*,j,iglob,rank,x(iglob),y(iglob)
+     &                  ,z(iglob),val
+                  abort=.true.
+                  cap2 = cap2 + 1
+               end if
+               end do
+               if (cap2.gt.0) then
+               cap1 = cap
+               cap  = cap + 1
+               if (cap1.le.lgli) gli(cap1,rank+1) = iglob
+               end if
+            end do
+            do i = 1, nproc
+               if (rank.eq.i-1) abortall=abort
+               call MPI_BCAST(abortall,1,MPI_LOGICAL,i-1,COMM_TINKER,i1)
+               if (abortall) then
+                  abort = .true.
+                  call MPI_AllGather(MPI_IN_PLACE,lgli,MPI_DATATYPE_NULL
+     $                              ,gli,lgli,MPI_INT,COMM_TINKER,i1)
+                  exit
+               end if
+            end do
+
+            if (abort) then
+            
+            cap  = 0
+            cap1 = 0
+            do i1 = 1, nproc; do i2 = 1,lgli
+               if ( gli(i2,i1).ne.0 ) then
+                  if (cap.eq.0) then
+                     cap = 1
+                     inte(cap) = gli(i2,i1)
+                  else if (cap.gt.0.and.abs(gli(i2,i1)-inte(1)).lt.5)
+     &                 then
+                     cap = cap + 1
+                     inte(2) = gli(i2,i1)
+                  else
+                     cap = cap + 1
+                  end if
+               end if
+            end do; end do
+            
+            if (cap.ne.2.and.rank.eq.0) then
+               print*,' more than one interactions found '
+     &               ,rank,cap
+            do i = 1,nproc
+               do j = 1,lgli
+                  if (gli(j,i).ne.0) write(*,'(I10,$)') gli(j,i)
+               end do
+               print*
+            end do
+            end if
+            
+            end if
+         end if
+
+      end if
+
+      do i = 1, sz
+         val = vector(i)
+         mi = min( mi,val )
+         ma = max( ma,val )
+         on = on + abs(val)
+      end do
+      end subroutine
 
       end

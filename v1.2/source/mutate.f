@@ -37,6 +37,8 @@ c
       character*240 record
       character*240 string
 c
+      if (deb_Path) write(iout,*), 'mutate '
+c
 c     deallocate global pointers if necessary
 c
       call dealloc_shared_mutate
@@ -240,6 +242,8 @@ c     on the lambda mutation parameter "tlambda"
 c
 c
       subroutine alttors (ntbnd,itbnd)
+      use inform
+      use iounit
       use mutant
       use potent
       use tors
@@ -250,6 +254,7 @@ c
       integer ntbnd
       integer itbnd(2,*)
 c
+      if (deb_Path) write(iout,*), 'alttors '
 c
 c     set torsional parameters across freely rotatable bonds
 c
@@ -299,6 +304,8 @@ c
       use chgtrn
       use cflux
       use domdec
+      use inform
+      use iounit
       use mpole
       use mutant
       use polar
@@ -306,6 +313,9 @@ c
       implicit none
       integer i,j,k
       integer ia,ib,ic
+c
+      if (deb_Path) write(iout,*), 'altelec '
+c
 c
 c
 c     set electrostatic parameters for partial charge models
@@ -395,15 +405,19 @@ c
 c
 c     subroutine def_lambdadyn_init: lambda dynamics initialization
 c
-      subroutine def_lambdadyn_init
+      subroutine def_lambdadyn_init(rank_)
+      use inform
       use iounit
       use keys
       use mutant
       implicit none
+      integer,intent(in) :: rank_
       integer i,next
       character*20 keyword
       character*240 record
       character*240 string
+c
+      if (deb_Path) write(iout,*), 'def_lambdadyn_init '
 c
       bvlambda = 0.5d0
       belambda = 0.5d0
@@ -432,7 +446,7 @@ c
          end if
    20    continue
       end do
-      call def_lambdadyn
+      call def_lambdadyn(rank_)
       return
       end
 
@@ -449,7 +463,7 @@ c     the van der Waals and electrostatic interactions respectively, defining th
 c     as functions of the generic state weighting value lambda 
 c
 c
-      subroutine def_lambdadyn
+      subroutine def_lambdadyn(rank_)
       use atmtyp
       use atoms
       use domdec
@@ -461,10 +475,14 @@ c
       use mpi
       use potent
       implicit none
+      integer,intent(in) :: rank_
       integer ierr
+c
+      if (deb_Path) write(iout,*), 'def_lambdadyn '
+c
 
 c     checks if the intervall bounds for vlambda and elambda are consistent
-      if (rank.eq.0) then
+      if (rank_.eq.0) then
        if ( bvlambda .le. 0.0d0 .OR. bvlambda .gt. 1.0d0 ) then
          write(iout,*) 'Intervall bound for vlambda must be between 0 ',
      $ 'and 1'
@@ -518,7 +536,7 @@ c     checks if the intervall bounds for vlambda and elambda are consistent
          dlambdaelambda = 0.0d0
       end if
 
-      if ((rank.eq.0).and.(verbose)) then
+      if ((rank_.eq.0).and.(verbose)) then
          write(iout,20) vlambda, dlambdavlambda
  20      format('Value of vlambda is ', F15.3, 
      $        ' Value of dlambdavlambda is ',F15.3)
