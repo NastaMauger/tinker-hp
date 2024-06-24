@@ -16,6 +16,7 @@ c
 c
 #include "tinker_macro.h"
       subroutine mdinit(dt)
+      use abinitio
       use atmtyp
       use atoms      ,only: pbcunwrap
       use atomsMirror
@@ -170,7 +171,7 @@ c
       startsavespec=25
       qtb_thermostat=.false.
       adaptive_qtb=.false.
-c
+
 c     set default values for lambda dynamic
 c
 c      use_lambdadyn = .false.
@@ -290,6 +291,9 @@ c          call upcase (volscale)
           lplumed = .true.
           call getword(record,pl_input ,next)
           call getword(record,pl_output,next)
+        case ('AIMD')
+          aiMD = .true.
+          call read_aimd_keys
         end select
 
         if (ios /= 0) then
@@ -297,6 +301,8 @@ c          call upcase (volscale)
      &         ," not correctly read!"
         endif
       end do
+
+
 c
 c     enforce the use of monte-carlo barostat with the TCG family of solvers
 c

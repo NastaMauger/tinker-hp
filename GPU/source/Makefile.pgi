@@ -161,7 +161,7 @@ MODSHA += MOD_nvtx.o
 MODSHA += MOD_sizes.o
 MODSHA += MOD_memory.o
 
-MODSAM  = MOD_action.o MOD_analyz.o MOD_angang.o MOD_angle.o\
+MODSAM  = MOD_abinitio.o  MOD_action.o MOD_analyz.o MOD_angang.o MOD_angle.o\
    MOD_angpot.o MOD_angtor.o MOD_ani.o MOD_argue.o MOD_ascii.o MOD_atmlst.o\
    MOD_atoms.o MOD_atmtyp.o MOD_bath.o MOD_bitor.o\
    MOD_bndpot.o MOD_bond.o MOD_bound.o MOD_boxes.o\

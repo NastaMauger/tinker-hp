@@ -13,6 +13,7 @@ echo "****** Making libtinker.a ******"
 ar -crs libtinker.a \
 MOD_sizes.o \
 MOD_tinheader.o \
+MOD_abinitio.o \
 MOD_action.o \
 MOD_analyz.o \
 MOD_angang.o \
