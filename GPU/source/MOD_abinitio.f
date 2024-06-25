@@ -29,6 +29,9 @@ c
       integer :: nprocs
       integer :: maxcore
 
+      integer :: compteur_aimd = 0
+
+
       contains
 
       subroutine read_aimd_keys()
@@ -42,6 +45,7 @@ c
       character*240 :: string
       character*240 :: xyzfile
       integer :: next,i, ios
+
 
 
 c
@@ -130,7 +134,6 @@ c
       endif 
 
       
-      call write_qm_inputs
 c      call launch_qm_software
 
       end subroutine read_aimd_keys
@@ -140,108 +143,132 @@ c      call launch_qm_software
       use domdec
       use keys
       implicit none
-      integer :: i, n
-      
-      if (orca_qm == .true.) then
-        open(415, file='orca_0.in')
-        write(415,'(A, 1X, A, 1X, A, 1X, A, A, A)') '!',
-     &   trim(method), trim(basis), trim(jobtype), 
-     &   ' ENGRAD xyzfile NoFrozenCore'
-        write(415,'(A,I0,A)') '%PAL NPROCS ', nprocs, ' END'
-        write(415,'(A,I0)') '%MAXCORE ', maxcore
-        write(415,'(A,I0,1X, I0)') '*xyz ', charge, multiplicity
-        call getxyz
-        write(415,'(A)') '*'
-        close(415)
+      character*40 filename
+      character*40 filename_orca, filename_g16, filename_psi4
+      character*40 filename_pyscf, filename_qchem
 
-      elseif (g16_qm == .true.) then
-        maxcore=maxcore/1e3
-        open(416, file='g16_0.in')
-        write(416,'(A)') '%chk=g16_0.chk'
-        write(416,'(A,I0)') '%nprocshared=', nprocs
-        write(416,'(A,I0,A,I0)') '%mem=', maxcore,'GB'
-        write(416, '(A, A, A, A, A, A, A)') '#P ', trim(method), '/', 
-     &                       trim(basis),' ', trim(jobtype),' Force'
-        write(416,'(A)') ''
-        write(416,'(A)') 'Initial Input'
-        write(416,'(A)') ''
-        write(416,'(I0,1X, I0)') charge, multiplicity
-        call getxyz
-        write(416,'(A)') ''
-        close(416)
+      write(*,*) 'compteur = ',compteur_aimd
+      if (compteur_aimd == 0) then
+          write(filename_orca, '(A,I0,A)') 'orca_', compteur_aimd, '.in'
+          write(filename_g16, '(A,I0,A)') 'g16_', compteur_aimd, '.in'
+          write(filename_psi4, '(A,I0,A)') 'psi4_', compteur_aimd, '.in'
+          write(filename_pyscf, '(A,I0,A)') 'pyscf_',compteur_aimd,'.in'
+          write(filename_qchem, '(A,I0,A)') 'qchem_',compteur_aimd,'.in'
+!      else
+!          write(filename_orca, '(A,I0,A)') 'orca_', compteur_aimd, 
+!     $              '_beads', numberbeads, '.in'
+!          write(filename_orca, '(A,I0,A)') 'orca_', compteur_aimd,
+!     $              '_beads', numberbeads, '.in'
+!          write(filename_g16, '(A,I0,A)') 'g16_', compteur_aimd, 
+!     $              '_beads', numberbeads, '.in'
+!          write(filename_psi4, '(A,I0,A)') 'psi4_', compteur_aimd,
+!     $              '_beads', numberbeads, '.in'
+!          write(filename_pyscf, '(A,I0,A)') 'pyscf_',compteur_aimd,
+!     $              '_beads', numberbeads, '.in'
+!          write(filename_qchem, '(A,I0,A)') 'qchem_',compteur_aimd,
+!     $              '_beads', numberbeads, '.in'
 
-      elseif (psi4_qm == .true.) then
-        open(417, file='psi4_0.in')
-        maxcore=maxcore/1e3
-        write(417,'(A,I0,A,I0)') 'memory ', maxcore,' GB'
-        write(417,'(A)') ''
-        write(417, '(A)') 'molecule {'
-        write(417,'(I0,1X, I0)') charge, multiplicity
-        call getxyz
-        write(417, '(A)') '}'
-        write(417,'(A)') ''
-        write(417, '(A)') 'set {'
-        write(417, '(A)') ' basis ' // trim(basis)
-        write(417, '(A)') ' mp2_type conv' 
-        write(417, '(A)') '}'
-        write(417,'(A)') ''
-        write(417, '(A)') '#Compute Gradient'
-        write(417, '(A)') 'grad = gradient(''' // trim(method) // ''')'
-        write(417,'(A)') ''
-        write(417, '(A)') '#Compute Energy'
-        write(417, '(A)') 'ener = energy(''' // trim(method) // ''')'
-        close(417)
+        if (orca_qm == .true.) then
+          open(415, file=trim(filename_orca))
+          write(415,'(A, 1X, A, 1X, A, 1X, A, A, A)') '!',
+     &     trim(method), trim(basis), trim(jobtype), 
+     &     ' ENGRAD xyzfile NoFrozenCore'
+          write(415,'(A,I0,A)') '%PAL NPROCS ', nprocs, ' END'
+          write(415,'(A,I0)') '%MAXCORE ', maxcore
+          write(415,'(A,I0,1X, I0)') '*xyz ', charge, multiplicity
+          call getxyz
+          write(415,'(A)') '*'
+          close(415)
 
-      elseif (pyscf_qm == .true.) then
-        open(418, file='pyscf_0.in')
-        write(418,'(A)') 'from pyscf import gto, scf, mp, grad'
-        write(418,'(A)') 'import numpy as np'
-        write(418,'(A)') 'import sys' 
-        write(418,'(A)') ''
-        write(418,'(A)') 'sys.stdout = open("pyscf_0.out", "w")'
-        write(418,'(A)') 'sys.stderr = sys.stdout'
-        write(418,'(A)') ''
-        write(418,'(A)') 'water = '''''''
-        call getxyz
-        write(418,'(A)') ' '''''''
-        write(418,'(A)') 'mol = gto.Mole()'
-        write(418,'(A)') 'mol.atom = water'
-        write(418, '(A,A,A)') 'mol.basis = "', trim(basis), '"'
-        write(418,'(A)') 'mol.build()'
-        write(418, '(A)') ''
-        write(417, '(A)') '#Perform HF calculation'
-        write(418, '(A)') 'myhf = scf.RHF(mol)'
-        write(418, '(A)') 'myhf.kernel()'
-        write(418, '(A)') ''
-        write(417, '(A)') '#Perform MP2 calculation'
-        write(418, '(A)') 'mymp = mp.MP2(myhf)'
-        write(418, '(A)') 'mymp.kernel()'
-        write(418, '(A)') ''
-        write(418, '(A)') '#Compute the MP2 gradient'
-        write(418, '(A)') 'mp2_grad = grad.mp2.Gradients(mymp)'
-        write(418, '(A)') 'gradient = mp2_grad.kernel()'
-        write(418, '(A)') ''
-        write(418, '(A)') 'sys.stdout.close()'
-        write(418, '(A)') 'sys.stdout = sys.__stdout__'
-        write(418, '(A)') 'sys.stderr = sys.__stderr__'
-        close(418)
+        elseif (g16_qm == .true.) then
+          maxcore=maxcore/1e3
+          open(416, file=trim(filename_g16))
+          write(416,'(A)') '%chk=g16_0.chk'
+          write(416,'(A,I0)') '%nprocshared=', nprocs
+          write(416,'(A,I0,A,I0)') '%mem=', maxcore,'GB'
+          write(416, '(A, A, A, A, A, A, A)') '#P ', trim(method), '/', 
+     &                         trim(basis),' ', trim(jobtype),' Force'
+          write(416,'(A)') ''
+          write(416,'(A)') 'Initial Input'
+          write(416,'(A)') ''
+          write(416,'(I0,1X, I0)') charge, multiplicity
+          call getxyz
+          write(416,'(A)') ''
+          close(416)
+
+        elseif (psi4_qm == .true.) then
+          maxcore=maxcore/1e3
+          open(417, file=trim(filename_psi4))
+          write(417,'(A,I0,A,I0)') 'memory ', maxcore,' GB'
+          write(417,'(A)') ''
+          write(417, '(A)') 'molecule {'
+          write(417,'(I0,1X, I0)') charge, multiplicity
+          call getxyz
+          write(417, '(A)') '}'
+          write(417,'(A)') ''
+          write(417, '(A)') 'set {'
+          write(417, '(A)') ' basis ' // trim(basis)
+          write(417, '(A)') ' mp2_type conv' 
+          write(417, '(A)') '}'
+          write(417,'(A)') ''
+          write(417, '(A)') '#Compute Gradient'
+          write(417, '(A)') 'grad = gradient('''// trim(method) // ''')'
+          write(417,'(A)') ''
+          write(417, '(A)') '#Compute Energy'
+          write(417, '(A)') 'ener = energy(''' // trim(method) // ''')'
+          close(417)
+
+        elseif (pyscf_qm == .true.) then
+          open(418, file=trim(filename_pyscf))
+          write(418,'(A)') 'from pyscf import gto, scf, mp, grad'
+          write(418,'(A)') 'import numpy as np'
+          write(418,'(A)') 'import sys' 
+          write(418,'(A)') ''
+          write(418,'(A)') 'sys.stdout = open("pyscf_0.out", "w")'
+          write(418,'(A)') 'sys.stderr = sys.stdout'
+          write(418,'(A)') ''
+          write(418,'(A)') 'water = '''''''
+          call getxyz
+          write(418,'(A)') ' '''''''
+          write(418,'(A)') 'mol = gto.Mole()'
+          write(418,'(A)') 'mol.atom = water'
+          write(418, '(A,A,A)') 'mol.basis = "', trim(basis), '"'
+          write(418,'(A)') 'mol.build()'
+          write(418, '(A)') ''
+          write(418, '(A)') '#Perform HF calculation'
+          write(418, '(A)') 'myhf = scf.RHF(mol)'
+          write(418, '(A)') 'myhf.kernel()'
+          write(418, '(A)') ''
+          write(418, '(A)') '#Perform MP2 calculation'
+          write(418, '(A)') 'mymp = mp.MP2(myhf)'
+          write(418, '(A)') 'mymp.kernel()'
+          write(418, '(A)') ''
+          write(418, '(A)') '#Compute the MP2 gradient'
+          write(418, '(A)') 'mp2_grad = grad.mp2.Gradients(mymp)'
+          write(418, '(A)') 'gradient = mp2_grad.kernel()'
+          write(418, '(A)') ''
+          write(418, '(A)') 'sys.stdout.close()'
+          write(418, '(A)') 'sys.stdout = sys.__stdout__'
+          write(418, '(A)') 'sys.stderr = sys.__stderr__'
+          close(418)
      
-      elseif (qchem_qm == .true.) then
-        open(419, file='qchem_0.in')
-        write(419,'(A)') '$molecule'
-        write(419,'(1X,I0,1X, I0)') charge, multiplicity
-        call getxyz
-        write(419,'(A)') '$end'
-        write(419, '(A)') ''
-        write(419, '(A)') '$rem'
-        write(419, '(A,A)') ' jobtype force' 
-        write(419, '(A,A)') ' method ', trim(method)
-        write(419, '(A,A)') ' basis ', trim(basis)
-        write(419, '(A,A)') ' N_FROZEN_CORE 0' 
-        write(419, '(A,A)') ' SYM_IGNORE = true' 
-        write(419, '(A,I0)') ' MEM_TOTAL ', maxcore
-        write(419,'(A)') '$end'
-        close(419)
+        elseif (qchem_qm == .true.) then
+          open(419, file=trim(filename_qchem))
+          write(419,'(A)') '$molecule'
+          write(419,'(1X,I0,1X, I0)') charge, multiplicity
+          call getxyz
+          write(419,'(A)') '$end'
+          write(419, '(A)') ''
+          write(419, '(A)') '$rem'
+          write(419, '(A,A)') ' jobtype force' 
+          write(419, '(A,A)') ' method ', trim(method)
+          write(419, '(A,A)') ' basis ', trim(basis)
+          write(419, '(A,A)') ' N_FROZEN_CORE 0' 
+          write(419, '(A,A)') ' SYM_IGNORE = true' 
+          write(419, '(A,I0)') ' MEM_TOTAL ', maxcore
+          write(419,'(A)') '$end'
+          close(419)
+        endif
       endif
 
       end subroutine write_qm_inputs
