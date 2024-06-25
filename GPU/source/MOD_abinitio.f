@@ -31,8 +31,12 @@ c
 
       integer :: compteur_aimd = 0
 
-      character*40 filename_orca, filename_g16, filename_psi4
-      character*40 filename_pyscf, filename_qchem
+      character*40 filename_orca
+      character*40 filename_g16 
+      character*40 filename_psi4
+      character*40 filename_pyscf
+      character*40 filename_qchem
+      character*40 qm_grad_filename
 
 
       contains
@@ -64,7 +68,6 @@ c
 
       method        = 'B3LYP'
       basis         = '6-31g'
-      jobtype       = 'sp'
       multiplicity  = 1
       charge        = 0
 
@@ -88,8 +91,6 @@ c
           read (string,*,iostat=ios) method 
         case('BASIS')
           read (string,*,iostat=ios) basis
-        case('JOBTYPE')
-          read (string,*,iostat=ios) jobtype
         case('MULTIPLICITY')
           read (string,*,iostat=ios) multiplicity
         case('CHARGE')
@@ -140,8 +141,6 @@ c
 
 
       subroutine write_qm_inputs() 
-      use domdec
-      use keys
       implicit none
 
       if (compteur_aimd == 0) then
@@ -165,6 +164,7 @@ c
 !     $              '_beads', numberbeads, '.in'
 
         if (orca_qm == .true.) then
+          jobtype='sp'
           open(415, file=trim(filename_orca))
           write(415,'(A, 1X, A, 1X, A, 1X, A, A, A)') '!',
      &     trim(method), trim(basis), trim(jobtype), 
@@ -178,12 +178,13 @@ c
 
         elseif (g16_qm == .true.) then
           maxcore=maxcore/1e3
+          jobtype='Force'
           open(416, file=trim(filename_g16))
           write(416,'(A)') '%chk=g16_0.chk'
           write(416,'(A,I0)') '%nprocshared=', nprocs
           write(416,'(A,I0,A,I0)') '%mem=', maxcore,'GB'
-          write(416, '(A, A, A, A, A, A, A)') '#P ', trim(method), '/', 
-     &                         trim(basis),' ', trim(jobtype),' Force'
+          write(416, '(A, A, A ,A, A, A )') '#P ', trim(method), '/', 
+     &                         trim(basis), ' ', trim(jobtype)
           write(416,'(A)') ''
           write(416,'(A)') 'Initial Input'
           write(416,'(A)') ''
@@ -204,7 +205,7 @@ c
           write(417,'(A)') ''
           write(417, '(A)') 'set {'
           write(417, '(A)') ' basis ' // trim(basis)
-          write(417, '(A)') ' mp2_type conv' 
+          write(417, '(A)') ' ' // trim(method) // '_type conv'
           write(417, '(A)') '}'
           write(417,'(A)') ''
           write(417, '(A)') '#Compute Gradient'
@@ -235,13 +236,15 @@ c
           write(418, '(A)') 'myhf = scf.RHF(mol)'
           write(418, '(A)') 'myhf.kernel()'
           write(418, '(A)') ''
-          write(418, '(A)') '#Perform MP2 calculation'
-          write(418, '(A)') 'mymp = mp.MP2(myhf)'
+          write(418, '(A)') '#Perform '// trim(method) // ' calculation'
+          write(418, '(A)') 'mymp = mp.' // trim(method) // '(myhf)'
           write(418, '(A)') 'mymp.kernel()'
           write(418, '(A)') ''
-          write(418, '(A)') '#Compute the MP2 gradient'
-          write(418, '(A)') 'mp2_grad = grad.mp2.Gradients(mymp)'
-          write(418, '(A)') 'gradient = mp2_grad.kernel()'
+          write(418, '(A)') '#Compute the '// trim(method)// ' gradient'
+          write(418, '(A)') 'mp2_grad = grad.' // trim(method) //
+     $                        '.Gradients(mymp)'
+          write(418, '(A)') 'gradient = ' // trim(method) //
+     $                      '.grad.kernel()'
           write(418, '(A)') ''
           write(418, '(A)') 'sys.stdout.close()'
           write(418, '(A)') 'sys.stdout = sys.__stdout__'
@@ -249,6 +252,7 @@ c
           close(418)
      
         elseif (qchem_qm == .true.) then
+          jobtype='Force'
           open(419, file=trim(filename_qchem))
           write(419,'(A)') '$molecule'
           write(419,'(1X,I0,1X, I0)') charge, multiplicity
@@ -256,7 +260,7 @@ c
           write(419,'(A)') '$end'
           write(419, '(A)') ''
           write(419, '(A)') '$rem'
-          write(419, '(A,A)') ' jobtype force' 
+          write(419, '(A,A)') ' jobtype ', trim(jobtype)
           write(419, '(A,A)') ' method ', trim(method)
           write(419, '(A,A)') ' basis ', trim(basis)
           write(419, '(A,A)') ' N_FROZEN_CORE 0' 
@@ -278,20 +282,135 @@ c
       character*240  command
 
 
-      if (compteur_aimd == 0) then
-       if (orca_qm) then
-        write(*,*) 'ORCA FILENAME = ', filename_orca 
+!!      if (compteur_aimd == 0) then
+!!       if (orca_qm) then
+!!        write(*,*) 'ORCA FILENAME = ', filename_orca 
 !!               command = "$(which orca) filename_orca > orca_0.out"
 !!               call system(command)
-        endif
-      endif
+!!        endif
+!!      endif
               
 
       end subroutine launch_qm_software
 
 
       subroutine get_gradient_from_qm
+      use units
       implicit none
+      integer :: i,iostat
+      integer :: number_atoms
+      logical qm_grad_file_found
+      logical :: found_energy, found_gradient, found_atoms
+      real :: energy
+      real(r_p), allocatable :: gradient_qm(:,:)
+      character*40 compteur_aimd_str
+      character*40 energy_str 
+      character*400 line
+
+      found_energy = .false.
+      found_atoms = .false.
+      found_gradient = .false.
+
+      write(compteur_aimd_str, '(I10)') compteur_aimd
+
+      if (orca_qm == .true.) then
+        qm_grad_filename = 'orca_' 
+     $         // trim(adjustl(compteur_aimd_str)) // '.engrad'
+      
+      else if(g16_qm == .true.) then
+        qm_grad_filename = 'g16_' 
+     $         // trim(adjustl(compteur_aimd_str)) // '.log'
+
+      else if(psi4_qm == .true.) then
+        qm_grad_filename = 'psi4_' 
+     $         // trim(adjustl(compteur_aimd_str)) // '.inp.dat'
+        
+      endif
+
+
+
+      inquire(file=qm_grad_filename, exist=qm_grad_file_found)
+      if(qm_grad_file_found) then 
+        write(*,*) 'READIND GRAD VALUES FROM ', qm_grad_filename
+        if(orca_qm) then
+          open(425, file=qm_grad_filename, status='old')
+          do 
+            read(425, '(A)', iostat=iostat) line
+            if (iostat /= 0) exit
+            if (index(line, 'current total energy') /= 0 .and.
+     $            .not. found_energy) then
+              read(425,'(A)', iostat=iostat) line
+              read(425,'(A)', iostat=iostat) line
+              read(line,*) energy   
+              found_energy=.true.
+
+            else if (index(line, 'Number of atoms') /= 0 .and. 
+     $            .not. found_atoms) then
+              read(425,'(A)', iostat=iostat) line
+              read(425,'(A)', iostat=iostat) line
+              read(line,*) number_atoms
+              found_atoms=.true.  
+
+            else if (index(line, 'current gradient in') /= 0 .and. 
+     $            .not. found_gradient) then
+              allocate(gradient_qm(number_atoms,3))
+              read(425,'(A)', iostat=iostat) line
+              read(425,'(A)', iostat=iostat) line
+              do i=1, number_atoms
+                read(line,*) gradient_qm(i,1) 
+                gradient_qm(i,1) = gradient_qm(i,1) * hartree / bohr
+                read(425,'(A)', iostat=iostat) line
+                read(line,*) gradient_qm(i,2)
+                gradient_qm(i,2) = gradient_qm(i,2) * hartree / bohr
+                read(425,'(A)', iostat=iostat) line
+                read(line,*) gradient_qm(i,3) 
+                gradient_qm(i,3) = gradient_qm(i,3) * hartree / bohr
+              enddo
+              found_gradient=.true.
+
+            endif
+          enddo
+          close(425)
+
+        else if(g16_qm) then
+          open(426, file=qm_grad_filename, status='old')
+          do 
+            read(426, '(A)', iostat=iostat) line
+            if (iostat /= 0) exit
+            if (index(line, 'current total energy') /= 0 .and.
+     $                  .not. found_energy) then
+              read(426,'(A)', iostat=iostat) line
+            endif
+          enddo
+          close(426)
+
+        else if(psi4_qm) then
+          open(427, file=qm_grad_filename, status='old')
+        
+        endif
+      else
+        write(*,*) 'NO GRAD FILE FOUND'
+        call fatal()
+      endif
+
+      if (found_gradient) then
+          write(*,*) 'Gradient values:'
+          do i = 1, number_atoms
+              write(*,'(A,I3,3F16.9)') 'Atom', i, gradient_qm(i, 1), 
+     $                gradient_qm(i, 2), gradient_qm(i, 3)
+          enddo
+      endif
+
+
+!      if (orca_qm) then
+!        inquire (file=filename_orca_grad, exist=qm_grad_found)
+!        if (qm_grad_found) then
+!          open(425, file=_filename_orca_grad)
+!          write(*,*) 'ORCA GRAD FILENAME = ', filename_orca_grad
+!        else
+!          write(*,*) 'ORCA GRAD FILENAME NOT FOUND'
+!          call fatal()
+!      endif
 
       end subroutine get_gradient_from_qm
 
