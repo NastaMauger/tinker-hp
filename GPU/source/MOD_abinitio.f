@@ -31,6 +31,9 @@ c
 
       integer :: compteur_aimd = 0
 
+      character*40 filename_orca, filename_g16, filename_psi4
+      character*40 filename_pyscf, filename_qchem
+
 
       contains
 
@@ -133,9 +136,6 @@ c
         call fatal
       endif 
 
-      
-c      call launch_qm_software
-
       end subroutine read_aimd_keys
 
 
@@ -143,11 +143,7 @@ c      call launch_qm_software
       use domdec
       use keys
       implicit none
-      character*40 filename
-      character*40 filename_orca, filename_g16, filename_psi4
-      character*40 filename_pyscf, filename_qchem
 
-      write(*,*) 'compteur = ',compteur_aimd
       if (compteur_aimd == 0) then
           write(filename_orca, '(A,I0,A)') 'orca_', compteur_aimd, '.in'
           write(filename_g16, '(A,I0,A)') 'g16_', compteur_aimd, '.in'
@@ -271,6 +267,9 @@ c      call launch_qm_software
         endif
       endif
 
+      call launch_qm_software
+      call get_gradient_from_qm
+
       end subroutine write_qm_inputs
 
 
@@ -279,16 +278,22 @@ c      call launch_qm_software
       character*240  command
 
 
-      if (orca_qm) then
-              command = "$(which orca) orca_0.inp > orca_0.out"
-              call system(command)
+      if (compteur_aimd == 0) then
+       if (orca_qm) then
+        write(*,*) 'ORCA FILENAME = ', filename_orca 
+!!               command = "$(which orca) filename_orca > orca_0.out"
+!!               call system(command)
+        endif
       endif
               
-      
-
-    
 
       end subroutine launch_qm_software
+
+
+      subroutine get_gradient_from_qm
+      implicit none
+
+      end subroutine get_gradient_from_qm
 
       end module abinitio
 
