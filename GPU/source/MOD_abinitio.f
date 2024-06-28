@@ -303,17 +303,19 @@ c
       subroutine get_gradient_from_qm
       use units
       implicit none
-      integer :: i,iostat
+      integer :: i,j,k,iostat
       integer :: number_atoms
-      integer :: dummy, count_lines
+      integer :: dummy, count_lines, compteur, remainder,total
       integer :: pos, pos_start, pos_end
       logical :: start_count
       logical qm_grad_file_found
       logical :: found_energy, found_gradient, found_atoms
       real :: energy
       real(r_p), allocatable :: gradient_qm(:,:)
+      real(r_p), allocatable :: grad(:,:)
       character*40 energy_str 
       character*400 line
+      character*400 line_1, line_2, line_3
       character*1 dummy_char
 
       found_energy = .false.
@@ -336,7 +338,10 @@ c
       else if(pyscf_qm == .true.) then
         qm_grad_filename = 'pyscf_' 
      $         // trim(adjustl(compteur_aimd_str)) // '.out'
-        
+
+      else if(qchem_qm == .true.) then
+        qm_grad_filename = 'qchem_' 
+     $         // trim(adjustl(compteur_aimd_str)) // '.out'
         
       endif
 
@@ -344,7 +349,7 @@ c
 
       inquire(file=qm_grad_filename, exist=qm_grad_file_found)
       if(qm_grad_file_found) then 
-        write(*,*) 'READIND GRADIENT FROM ', qm_grad_filename
+        write(*,*) 'READING GRADIENT FROM ', qm_grad_filename
         if(orca_qm) then
           open(425, file=qm_grad_filename, status='old')
           do 
@@ -352,8 +357,8 @@ c
             if (iostat /= 0) exit
             if (index(line, 'current total energy') /= 0 .and.
      $            .not. found_energy) then
-              read(425,'(A)', iostat=iostat) line
-              read(425,'(A)', iostat=iostat) line
+              read(425,'(A)', iostat=iostat) line 
+              read(425,'(A)', iostat=iostat) line 
               read(line,*) energy   
               found_energy=.true.
 
@@ -388,7 +393,7 @@ c
         else if(g16_qm) then
           open(426, file=qm_grad_filename, status='old')
           do 
-            read(426, '(A)', iostat=iostat) line
+            read(426, '(A)', iostat=iostat) line 
             if (iostat /= 0) exit
             if (index(line, trim(method) // '=') /= 0 .and.
      $                  .not. found_energy) then
@@ -409,9 +414,9 @@ c
             else if (index(line, 'Forces (Hartrees/Bohr)') /= 0 .and. 
      $            .not. found_gradient) then
               allocate(gradient_qm(number_atoms,3))
-              read(426,'(A)', iostat=iostat) line
-              read(426,'(A)', iostat=iostat) line
-              read(426,'(A)', iostat=iostat) line
+              read(426,'(A)', iostat=iostat) line 
+              read(426,'(A)', iostat=iostat) line 
+              read(426,'(A)', iostat=iostat) line 
               do i=1, number_atoms
                 read(line,*) dummy, dummy, gradient_qm(i,1) 
      $                  , gradient_qm(i,2), gradient_qm(i,3)
@@ -444,9 +449,9 @@ c
             else if (index(line, '-Total gradient:') /= 0 .and. 
      $            .not. found_gradient) then
               allocate(gradient_qm(number_atoms,3))
-              read(427,'(A)', iostat=iostat) line
-              read(427,'(A)', iostat=iostat) line
-              read(427,'(A)', iostat=iostat) line
+              read(427,'(A)', iostat=iostat) line 
+              read(427,'(A)', iostat=iostat) line 
+              read(427,'(A)', iostat=iostat) line 
               do i=1, number_atoms
                 read(line,*) dummy, gradient_qm(i,1) 
      $                  , gradient_qm(i,2), gradient_qm(i,3)
@@ -482,7 +487,7 @@ c
                   else
                       count_lines = count_lines + 1
                   endif
-              end do
+              enddo
               number_atoms = count_lines - 2
               found_atoms = .true.
       
@@ -490,8 +495,8 @@ c
             elseif (index(line, 'gradients') /= 0 .and. 
      $            .not. found_gradient) then
               allocate(gradient_qm(number_atoms,3))
-              read(428,'(A)', iostat=iostat) line
-              read(428,'(A)', iostat=iostat) line
+              read(428,'(A)', iostat=iostat) line 
+              read(428,'(A)', iostat=iostat) line 
               do i=1, number_atoms
                 read(line,*) dummy, dummy_char, gradient_qm(i,1) 
      $                  , gradient_qm(i,2), gradient_qm(i,3)
@@ -505,6 +510,74 @@ c
             endif
           enddo
         close(428)
+
+        else if(qchem_qm) then
+          open(429, file=qm_grad_filename, status='old')
+          do 
+            read(429, '(A)', iostat=iostat) line
+            if (iostat /= 0) exit
+            if (index(line, 'total energy =') /= 0 .and.
+     $                  .not. found_energy) then
+              read(line(40:),*) energy
+              found_energy=.true.
+
+            elseif (index(line,'Atom')  /= 0 .and. 
+     $                  .not. found_atoms) then
+              read(429,'(A)', iostat=iostat) line
+              read(429,'(A)', iostat=iostat) line
+              start_count = .true.
+              count_lines = 1
+              do while (start_count)
+                read(429, '(A)', iostat=iostat) line 
+                  if (iostat /= 0 .or. index(line, '----') /= 0) then
+                      start_count = .false.
+                  else
+                      count_lines = count_lines + 1
+                  endif
+              enddo
+              number_atoms = count_lines 
+              found_atoms = .true.
+
+            write(*,*)'QCHEM GRADIENT READER NOT FIXED YET'  
+     $            //  '- CHANGE SOFTWARE'
+            call fatal
+!               number_atoms=11
+!               elseif (index(line, 'Full Analytical Gradient') /= 0 .and. 
+!        $            .not. found_gradient) then
+!                 read(429, '(A)', iostat=iostat) line
+!                 read(429, '(A)', iostat=iostat) line 
+!                 allocate(gradient_qm(number_atoms,3))
+!                 total = int(number_atoms/5)
+!                 compteur = 1
+!                 write(*,*) total 
+!   !
+!                 write(*,*) number_atoms, compteur
+!                 write(*,*) number_atoms/5
+!                 do compteur=1, total
+!                   do i = 1, 3
+!                     read(line,*) dummy
+!        $                , gradient_qm(1, i), gradient_qm(2,i)
+!        $                , gradient_qm(3, i), gradient_qm(4,i)
+!        $                , gradient_qm(5, i)                             
+!                     read(429, '(A)', iostat=iostat) line 
+!                     write(*,*) 
+!        $                  gradient_qm(1, i), gradient_qm(2,i)
+!        $                , gradient_qm(3, i), gradient_qm(4,i)
+!        $                , gradient_qm(5, i)                             
+!                   enddo
+!                   read(429, '(A)', iostat=iostat) line 
+!              enddo
+                
+
+c                read(line, *) dummy, 
+cc   $                    ((gradient_qm(compteur + j  , i), j = 1, 5))
+
+c              found_gradient=.true.
+            
+
+            endif
+          enddo
+        close(429)
         
         endif
       else
@@ -514,7 +587,7 @@ c
 
       if (found_gradient) then
           write(*,*) 'Gradient values:'
-          do i = 1, number_atoms
+          do i = 1, number_atoms 
               write(*,'(A,I3,3F16.9)') 'Atom', i, gradient_qm(i, 1), 
      $                gradient_qm(i, 2), gradient_qm(i, 3)
           enddo
