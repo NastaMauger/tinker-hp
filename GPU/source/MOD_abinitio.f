@@ -122,7 +122,7 @@ c
             qchem_qm = .true.
             write(*, *) 'AIMD with QCHEM software.'
           else
-            write(*, *) 'Unknown QM software', trim(value)
+            write(*, *) 'Unknown QM software: ', trim(value)
             call fatal
           endif
         end select
@@ -311,6 +311,7 @@ c
       logical qm_grad_file_found
       logical :: found_energy, found_gradient, found_atoms
       real :: energy
+      integer :: line_length
       real(r_p), allocatable :: gradient_qm(:,:)
       real(r_p), allocatable :: grad(:,:)
       character*40 energy_str 
@@ -395,14 +396,21 @@ c
           do 
             read(426, '(A)', iostat=iostat) line 
             if (iostat /= 0) exit
-            if (index(line, trim(method) // '=') /= 0 .and.
+            if (index(line, '\\' // trim(method) // '=') /= 0 .and. 
      $                  .not. found_energy) then
 !!!    NEED TO HANDLE THE CASE WHERE THE VALUE IS SEPARATED INTO 2 LINES  !!!
+              write(*,*) line
               pos_start = index(line, trim(method) // '=')
               pos_start = pos_start + len(trim(method)) + 1 
-              pos_end = index(line(pos_start:), ' ')
-              pos_end = pos_end + len(trim(method))
-              energy_str = (line(pos_start:pos_end))
+              line_length=len_trim(line)
+              do i = pos_start, line_length
+                if (line(i:i) == '\\') then
+                  pos_end = i-1 
+                  write(*,*) pos_end
+                  exit
+                endif
+              enddo
+              energy_str = line(pos_start:pos_end)
               read(energy_str,*) energy
               found_energy=.true.
 
@@ -585,6 +593,12 @@ c              found_gradient=.true.
         call fatal()
       endif
 
+      if (found_energy) then
+        write(*,*) 'ENERGY = ', energy
+      endif
+      if (found_atoms) then
+        write(*,*) 'NUMBER OF ATOMS = ', number_atoms
+      endif
       if (found_gradient) then
           write(*,*) 'Gradient values:'
           do i = 1, number_atoms 
