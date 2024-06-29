@@ -396,6 +396,9 @@ c
           do 
             read(426, '(A)', iostat=iostat) line 
             if (iostat /= 0) exit
+            if (trim(method) == 'B3LYP') then
+              method = 'HF'
+            endif
             if (index(line, '\\' // trim(method) // '=') /= 0 .and. 
      $                  .not. found_energy) then
 !!!    NEED TO HANDLE THE CASE WHERE THE VALUE IS SEPARATED INTO 2 LINES  !!!
