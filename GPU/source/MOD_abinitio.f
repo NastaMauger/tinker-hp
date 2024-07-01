@@ -19,15 +19,13 @@ c
 
       logical :: aiMD=.false.
       logical :: software_found
+      logical qm_input_file_found
+      logical qm_grad_file_found
       logical :: orca_qm, g16_qm, psi4_qm, pyscf_qm, qchem_qm
       integer :: multiplicity
       integer :: charge
-      character*11 :: method
-      character*11 :: basis
-      character*11 :: jobtype
 
       integer :: nprocs
-      integer :: maxcore
 
       integer :: compteur_aimd = 0
 
@@ -36,6 +34,7 @@ c
       character*40 filename_psi4
       character*40 filename_pyscf
       character*40 filename_qchem
+      character*40 qm_input_filename
       character*40 qm_grad_filename
 
       character*40 compteur_aimd_str
@@ -68,13 +67,8 @@ c
       qchem_qm=.false.
       software_found=.false.
 
-      method        = 'B3LYP'
-      basis         = '6-31g'
-      multiplicity  = 1
-      charge        = 0
 
       nprocs        = 6         !Number of CPUs core that the QM software need
-      maxcore       = 100000    !100Gb en Mb
 
 c
 c     check for keywords containing any altered parameters
@@ -89,19 +83,8 @@ c
         string = record(next:240)
 
         select case (trim(keyword))
-        case ('METHOD')
-          read (string,*,iostat=ios) method 
-        case('BASIS')
-          read (string,*,iostat=ios) basis
-        case('MULTIPLICITY')
-          read (string,*,iostat=ios) multiplicity
-        case('CHARGE')
-          read (string,*,iostat=ios) charge
         case('NPROCS')
           read (string,*,iostat=ios) nprocs 
-        case('MAXCORE')
-          read (string,*,iostat=ios) maxcore
-          maxcore=maxcore*1e3
         case('SOFTWARE')
           software_found = .true.
           call getword(record, value, next)
@@ -144,139 +127,174 @@ c
 
       subroutine write_qm_inputs() 
       implicit none
+      integer :: ios, iostat
+      logical :: copy_file
+      character*400 line
 
       write(compteur_aimd_str, '(I10)') compteur_aimd
 
+
       if (compteur_aimd == 0) then
-          write(filename_orca, '(A,I0,A)') 'orca_', compteur_aimd, '.in'
-          write(filename_g16, '(A,I0,A)') 'g16_', compteur_aimd, '.in'
-          write(filename_psi4, '(A,I0,A)') 'psi4_', compteur_aimd, '.in'
-          write(filename_pyscf, '(A,I0,A)') 'pyscf_',compteur_aimd,'.in'
-          write(filename_qchem, '(A,I0,A)') 'qchem_',compteur_aimd,'.in'
-!      else
-!          write(filename_orca, '(A,I0,A)') 'orca_', compteur_aimd, 
-!     $              '_beads', numberbeads, '.in'
-!          write(filename_orca, '(A,I0,A)') 'orca_', compteur_aimd,
-!     $              '_beads', numberbeads, '.in'
-!          write(filename_g16, '(A,I0,A)') 'g16_', compteur_aimd, 
-!     $              '_beads', numberbeads, '.in'
-!          write(filename_psi4, '(A,I0,A)') 'psi4_', compteur_aimd,
-!     $              '_beads', numberbeads, '.in'
-!          write(filename_pyscf, '(A,I0,A)') 'pyscf_',compteur_aimd,
-!     $              '_beads', numberbeads, '.in'
-!          write(filename_qchem, '(A,I0,A)') 'qchem_',compteur_aimd,
-!     $              '_beads', numberbeads, '.in'
+          if (orca_qm == .true.) then
+            qm_input_filename = 'orca_' 
+     $             // trim(adjustl(compteur_aimd_str)) // '.inp'
+          
+          else if(g16_qm == .true.) then
+            qm_input_filename = 'g16_' 
+     $             // trim(adjustl(compteur_aimd_str)) // '.inp'
 
-        if (orca_qm == .true.) then
-          jobtype='sp'
-          open(415, file=trim(filename_orca))
-          write(415,'(A, 1X, A, 1X, A, 1X, A, A, A)') '!',
-     &     trim(method), trim(basis), trim(jobtype), 
-     &     ' ENGRAD xyzfile NoFrozenCore'
-          write(415,'(A,I0,A)') '%PAL NPROCS ', nprocs, ' END'
-          write(415,'(A,I0)') '%MAXCORE ', maxcore
-          write(415,'(A,I0,1X, I0)') '*xyz ', charge, multiplicity
-          call getxyz
-          write(415,'(A)') '*'
-          close(415)
+          else if(psi4_qm == .true.) then
+            qm_input_filename = 'psi4_' 
+     $             // trim(adjustl(compteur_aimd_str)) // '.inp'
 
-        elseif (g16_qm == .true.) then
-          maxcore=maxcore/1e3
-          jobtype='Force'
-          open(416, file=trim(filename_g16))
-          write(416,'(A)') '%chk=g16_0.chk'
-          write(416,'(A,I0)') '%nprocshared=', nprocs
-          write(416,'(A,I0,A,I0)') '%mem=', maxcore,'GB'
-          write(416, '(A, A, A ,A, A, A )') '#P ', trim(method), '/', 
-     &                         trim(basis), ' ', trim(jobtype)
-          write(416,'(A)') ''
-          write(416,'(A)') 'Initial Input'
-          write(416,'(A)') ''
-          write(416,'(I0,1X, I0)') charge, multiplicity
-          call getxyz
-          write(416,'(A)') ''
-          close(416)
+          else if(pyscf_qm == .true.) then
+            qm_input_filename = 'pyscf_' 
+     $             // trim(adjustl(compteur_aimd_str)) // '.inp'
 
-        elseif (psi4_qm == .true.) then
-          maxcore=maxcore/1e3
-          open(417, file=trim(filename_psi4))
-          write(417,'(A,I0,A,I0)') 'memory ', maxcore,' GB'
-          write(417,'(A)') ''
-          write(417, '(A)') 'molecule {'
-          write(417,'(I0,1X, I0)') charge, multiplicity
-          call getxyz
-          write(417, '(A)') '}'
-          write(417,'(A)') ''
-          write(417, '(A)') 'set {'
-          write(417, '(A)') ' basis ' // trim(basis)
-          write(417, '(A)') ' ' // trim(method) // '_type conv'
-          write(417, '(A)') '}'
-          write(417,'(A)') ''
-          write(417, '(A)') '#Compute Gradient'
-          write(417, '(A)') 'grad = gradient('''// trim(method) // ''')'
-          write(417,'(A)') ''
-          write(417, '(A)') '#Compute Energy'
-          write(417, '(A)') 'ener = energy(''' // trim(method) // ''')'
-          close(417)
-
-        elseif (pyscf_qm == .true.) then
-          open(418, file=trim(filename_pyscf))
-          write(418,'(A)') 'from pyscf import gto, scf, mp, grad'
-          write(418,'(A)') 'import numpy as np'
-          write(418,'(A)') 'import sys' 
-          write(418,'(A)') ''
-          write(418,'(A)') 'sys.stdout = open("pyscf_'
-     $            // trim(adjustl(compteur_aimd_str)) //'.out", "w")'
-          write(418,'(A)') 'sys.stderr = sys.stdout'
-          write(418,'(A)') ''
-          write(418,'(A)') 'water = '''''''
-          call getxyz
-          write(418,'(A)') ' '''''''
-          write(418,'(A)') 'mol = gto.Mole()'
-          write(418,'(A)') 'mol.atom = water'
-          write(418, '(A,A,A)') 'mol.basis = "', trim(basis), '"'
-          write(418,'(A)') 'mol.build()'
-          write(418, '(A)') ''
-          write(418, '(A)') '#Perform HF calculation'
-          write(418, '(A)') 'myhf = scf.RHF(mol)'
-          write(418, '(A)') 'myhf.kernel()'
-          write(418, '(A)') ''
-          write(418, '(A)') '#Perform '// trim(method) // ' calculation'
-          write(418, '(A)') 'mymp = mp.' // trim(method) // '(myhf)'
-          write(418, '(A)') 'mymp.kernel()'
-          write(418, '(A)') ''
-          write(418, '(A)') '#Compute the '// trim(method)// ' gradient'
-          write(418, '(A)')  trim(method) // 
-     $                        '_grad = grad.' // trim(method) //
-     $                        '.Gradients(mymp)'
-          write(418, '(A)') 'gradient = ' // trim(method) //
-     $                      '.grad.kernel()'
-          write(418, '(A)') ''
-          write(418, '(A)') 'sys.stdout.close()'
-          write(418, '(A)') 'sys.stdout = sys.__stdout__'
-          write(418, '(A)') 'sys.stderr = sys.__stderr__'
-          close(418)
-     
-        elseif (qchem_qm == .true.) then
-          jobtype='Force'
-          open(419, file=trim(filename_qchem))
-          write(419,'(A)') '$molecule'
-          write(419,'(1X,I0,1X, I0)') charge, multiplicity
-          call getxyz
-          write(419,'(A)') '$end'
-          write(419, '(A)') ''
-          write(419, '(A)') '$rem'
-          write(419, '(A,A)') ' jobtype ', trim(jobtype)
-          write(419, '(A,A)') ' method ', trim(method)
-          write(419, '(A,A)') ' basis ', trim(basis)
-          write(419, '(A,A)') ' N_FROZEN_CORE 0' 
-          write(419, '(A,A)') ' SYM_IGNORE = true' 
-          write(419, '(A,I0)') ' MEM_TOTAL ', maxcore
-          write(419,'(A)') '$end'
-          close(419)
+          else if(qchem_qm == .true.) then
+            qm_input_filename = 'qchem_' 
+     $             // trim(adjustl(compteur_aimd_str)) // '.inp'
+            
+          endif
+        inquire(file=qm_input_filename, exist=qm_input_file_found)
+        if(.NOT. qm_input_file_found) then
+          write(*,*) 'NEED A QM INPUT FILE'
+          call fatal
         endif
       endif
 
+      copy_file=.true.
+
+      if (qm_input_file_found  .and.
+     $        orca_qm) then
+        open(unit=415, file=qm_input_filename, action='read')
+        open(unit=416 + compteur_aimd, file='orca_1_beads.inp'
+     $                , action='write', status='replace')
+        do
+          read(415,'(A)', iostat=ios) line
+          if (ios /= 0) exit
+
+          if(index(line, '*xyz') /=0 ) then
+            write(416 + compteur_aimd ,'(A)') trim(line)
+            copy_file = .false.
+          endif
+  
+          if(copy_file) then
+            write(416 + compteur_aimd ,'(A)') trim(line)
+          endif
+
+        enddo
+        close(415)
+        close(416 + compteur_aimd)
+      endif
+        
+      if (qm_input_file_found  .and.
+     $        g16_qm) then
+        open(unit=415, file=qm_input_filename, action='read')
+        open(unit=416 + compteur_aimd, file='g16_1_beads.inp'
+     $                , action='write', status='replace')
+        do
+          read(415,'(A)', iostat=ios) line
+          if (ios /= 0) exit
+
+          if(index(line, ',') /=0 ) then
+            write(416 + compteur_aimd ,'(A)') trim(line)
+            copy_file = .false.
+          endif
+  
+          if(copy_file) then
+            write(416 + compteur_aimd ,'(A)') trim(line)
+          endif
+
+        enddo
+        close(415)
+        close(416 + compteur_aimd)
+      endif
+        
+      if (qm_input_file_found  .and.
+     $        psi4_qm) then
+        open(unit=415, file=qm_input_filename, action='read')
+        open(unit=416 + compteur_aimd, file='psi4_1_beads.inp'
+     $                , action='write', status='replace')
+        do
+          read(415,'(A)', iostat=ios) line
+          if (ios /= 0) exit
+
+          if(index(line, 'molecule') /=0 ) then
+            write(416 + compteur_aimd ,'(A)') trim(line)
+            copy_file = .false.
+          endif
+  
+          if(copy_file) then
+            write(416 + compteur_aimd ,'(A)') trim(line)
+          endif
+
+          if (index(line, '}') /= 0) then
+            copy_file = .true.
+          endif
+
+        enddo
+        close(415)
+        close(416 + compteur_aimd)
+      endif
+    
+        
+      if (qm_input_file_found  .and.
+     $        pyscf_qm) then
+        open(unit=415, file=qm_input_filename, action='read')
+        open(unit=416 + compteur_aimd, file='pyscf_1_beads.inp'
+     $                , action='write', status='replace')
+        write(*,*) 'NEED QM WRITER FOR PYSCF - NOT IMPLEMENTED YET'
+        call fatal
+        do
+          read(415,'(A)', iostat=ios) line
+          if (ios /= 0) exit
+
+          if(index(line, 'molecule') /=0 ) then
+            write(416 + compteur_aimd ,'(A)') trim(line)
+            copy_file = .false.
+          endif
+  
+          if(copy_file) then
+            write(416 + compteur_aimd ,'(A)') trim(line)
+          endif
+
+          if (index(line, '$end') /= 0) then
+            copy_file = .true.
+          endif
+
+        enddo
+        close(415)
+        close(416 + compteur_aimd)
+      endif
+
+      if (qm_input_file_found  .and.
+     $        qchem_qm) then
+        open(unit=415, file=qm_input_filename, action='read')
+        open(unit=416 + compteur_aimd, file='qchem_1_beads.inp'
+     $                , action='write', status='replace')
+        do
+          read(415,'(A)', iostat=ios) line
+          if (ios /= 0) exit
+
+          if(index(line, 'molecule') /=0 ) then
+            write(416 + compteur_aimd ,'(A)') trim(line)
+            copy_file = .false.
+          endif
+  
+          if(copy_file) then
+            write(416 + compteur_aimd ,'(A)') trim(line)
+          endif
+
+          if (index(line, '$end') /= 0) then
+            copy_file = .true.
+          endif
+
+        enddo
+        close(415)
+        close(416 + compteur_aimd)
+      endif
+ 
       call launch_qm_software
       call get_gradient_from_qm
 
@@ -308,7 +326,6 @@ c
       integer :: dummy, count_lines, compteur, remainder,total
       integer :: pos, pos_start, pos_end
       logical :: start_count
-      logical qm_grad_file_found
       logical :: found_energy, found_gradient, found_atoms
       real :: energy
       integer :: line_length
@@ -317,7 +334,8 @@ c
       character*40 energy_str 
       character*400 line
       character*400 line_1, line_2, line_3
-      character*1 dummy_char
+      character *1 dummy_char
+      character*40 method
 
       found_energy = .false.
       found_atoms = .false.
@@ -334,7 +352,7 @@ c
 
       else if(psi4_qm == .true.) then
         qm_grad_filename = 'psi4_' 
-     $         // trim(adjustl(compteur_aimd_str)) // '.in.dat'
+     $         // trim(adjustl(compteur_aimd_str)) // '.inp.dat'
 
       else if(pyscf_qm == .true.) then
         qm_grad_filename = 'pyscf_' 
@@ -396,13 +414,17 @@ c
           do 
             read(426, '(A)', iostat=iostat) line 
             if (iostat /= 0) exit
-            if (trim(method) == 'B3LYP') then
-              method = 'HF'
-            endif
-            if (index(line, '\\' // trim(method) // '=') /= 0 .and. 
+            if (index(line, '\MP2=') /= 0 .and. 
      $                  .not. found_energy) then
-!!!    NEED TO HANDLE THE CASE WHERE THE VALUE IS SEPARATED INTO 2 LINES  !!!
-              write(*,*) line
+              method='MP2'
+            endif
+            if (index(line, '\MP2=') == 0 .and. 
+     $         index(line, '\HF=') /=0 .and.
+     $                  .not. found_energy) then
+              method='HF'
+            endif
+            if (index(line, '\\' // trim(method) // '=') /= 0 .and.
+     $                  .not. found_energy) then
               pos_start = index(line, trim(method) // '=')
               pos_start = pos_start + len(trim(method)) + 1 
               line_length=len_trim(line)
@@ -438,7 +460,7 @@ c
               enddo
               found_gradient=.true. 
 
-            endif
+           endif
           enddo
         close(426)
 
@@ -447,149 +469,164 @@ c
           do 
             read(427, '(A)', iostat=iostat) line
             if (iostat /= 0) exit
-            if (index(line, trim(method) // ' Total Energy') /= 0 .and.
-     $                  .not. found_energy) then
-              read(line(40:),*) energy_str 
-              found_energy=.true.
 
-            else if (index(line, 'Number of atoms:') /= 0 .and. 
+            if ((index(line, '= energy(''MP2'')') /= 0 .or. 
+     $           index(line, '= energy(''mp2'')') /= 0) .and. 
+     $                  .not. found_energy) then
+              method='MP2'
+            endif
+            if (index(line, 'energy(''scf'')') /= 0 .and. 
+     $                  .not. found_energy) then
+              method='HF'
+            endif
+ 
+            if (index(trim(line), 'MP2 Total Energy (a.u.)') /= 0 
+     $            .and. .not. found_energy) then
+                do i=1,6
+                  read(427,'(A)', iostat=iostat) line 
+                enddo
+                read(line(40:), *) energy_str 
+                read(energy_str,*) energy
+                found_energy = .true.
+
+            else if (index(line, 'Number of atoms') /= 0 .and. 
      $            .not. found_atoms) then
-              read(line(40:),*) number_atoms
-              found_atoms=.true.
-  
+               read(line(40:),*) number_atoms
+               found_atoms=.true.
+   
             else if (index(line, '-Total gradient:') /= 0 .and. 
      $            .not. found_gradient) then
-              allocate(gradient_qm(number_atoms,3))
-              read(427,'(A)', iostat=iostat) line 
-              read(427,'(A)', iostat=iostat) line 
-              read(427,'(A)', iostat=iostat) line 
-              do i=1, number_atoms
-                read(line,*) dummy, gradient_qm(i,1) 
+               allocate(gradient_qm(number_atoms,3))
+               read(427,'(A)', iostat=iostat) line 
+               read(427,'(A)', iostat=iostat) line 
+               read(427,'(A)', iostat=iostat) line 
+               do i=1, number_atoms
+                 read(line,*) dummy, gradient_qm(i,1) 
      $                  , gradient_qm(i,2), gradient_qm(i,3)
-                read(427,'(A)', iostat=iostat) line
-                gradient_qm(i,1) = gradient_qm(i,1) * hartree / bohr
-                gradient_qm(i,2) = gradient_qm(i,2) * hartree / bohr
-                gradient_qm(i,3) = gradient_qm(i,3) * hartree / bohr
-              enddo
-              found_gradient=.true. 
+                 read(427,'(A)', iostat=iostat) line
+                 gradient_qm(i,1) = gradient_qm(i,1) * hartree / bohr
+                 gradient_qm(i,2) = gradient_qm(i,2) * hartree / bohr
+                 gradient_qm(i,3) = gradient_qm(i,3) * hartree / bohr
+               enddo
+               found_gradient=.true. 
 
-            endif
-          enddo
-        close(427)
-
-        else if(pyscf_qm) then
-          open(428, file=qm_grad_filename, status='old')
-          do 
-            read(428, '(A)', iostat=iostat) line
-            if (iostat /= 0) exit
-            if (index(line, 'E(' // trim(method) // ') =') /= 0 .and.
-     $                  .not. found_energy) then
-              read(line(10:),*) energy
-              found_energy=.true.
-
-            elseif (index(line,trim(method) // ' gradients') /= 0 .and. 
-     $                  .not. found_atoms) then
-              start_count = .true.
-              count_lines = 1
-              do while (start_count)
-                read(428, '(A)', iostat=iostat) line
-                  if (iostat /= 0 .or. index(line, '----') /= 0) then
-                      start_count = .false.
-                  else
-                      count_lines = count_lines + 1
-                  endif
-              enddo
-              number_atoms = count_lines - 2
-              found_atoms = .true.
-      
-            rewind(428)
-            elseif (index(line, 'gradients') /= 0 .and. 
-     $            .not. found_gradient) then
-              allocate(gradient_qm(number_atoms,3))
-              read(428,'(A)', iostat=iostat) line 
-              read(428,'(A)', iostat=iostat) line 
-              do i=1, number_atoms
-                read(line,*) dummy, dummy_char, gradient_qm(i,1) 
-     $                  , gradient_qm(i,2), gradient_qm(i,3)
-                read(428,'(A)', iostat=iostat) line
-                gradient_qm(i,1) = gradient_qm(i,1) * hartree / bohr
-                gradient_qm(i,2) = gradient_qm(i,2) * hartree / bohr
-                gradient_qm(i,3) = gradient_qm(i,3) * hartree / bohr
-              enddo
-              found_gradient=.true. 
-              
-            endif
-          enddo
-        close(428)
-
-        else if(qchem_qm) then
-          open(429, file=qm_grad_filename, status='old')
-          do 
-            read(429, '(A)', iostat=iostat) line
-            if (iostat /= 0) exit
-            if (index(line, 'total energy =') /= 0 .and.
-     $                  .not. found_energy) then
-              read(line(40:),*) energy
-              found_energy=.true.
-
-            elseif (index(line,'Atom')  /= 0 .and. 
-     $                  .not. found_atoms) then
-              read(429,'(A)', iostat=iostat) line
-              read(429,'(A)', iostat=iostat) line
-              start_count = .true.
-              count_lines = 1
-              do while (start_count)
-                read(429, '(A)', iostat=iostat) line 
-                  if (iostat /= 0 .or. index(line, '----') /= 0) then
-                      start_count = .false.
-                  else
-                      count_lines = count_lines + 1
-                  endif
-              enddo
-              number_atoms = count_lines 
-              found_atoms = .true.
-
-            write(*,*)'QCHEM GRADIENT READER NOT FIXED YET'  
-     $            //  '- CHANGE SOFTWARE'
-            call fatal
-!               number_atoms=11
-!               elseif (index(line, 'Full Analytical Gradient') /= 0 .and. 
-!        $            .not. found_gradient) then
-!                 read(429, '(A)', iostat=iostat) line
-!                 read(429, '(A)', iostat=iostat) line 
-!                 allocate(gradient_qm(number_atoms,3))
-!                 total = int(number_atoms/5)
-!                 compteur = 1
-!                 write(*,*) total 
-!   !
-!                 write(*,*) number_atoms, compteur
-!                 write(*,*) number_atoms/5
-!                 do compteur=1, total
-!                   do i = 1, 3
-!                     read(line,*) dummy
-!        $                , gradient_qm(1, i), gradient_qm(2,i)
-!        $                , gradient_qm(3, i), gradient_qm(4,i)
-!        $                , gradient_qm(5, i)                             
-!                     read(429, '(A)', iostat=iostat) line 
-!                     write(*,*) 
-!        $                  gradient_qm(1, i), gradient_qm(2,i)
-!        $                , gradient_qm(3, i), gradient_qm(4,i)
-!        $                , gradient_qm(5, i)                             
-!                   enddo
-!                   read(429, '(A)', iostat=iostat) line 
-!              enddo
-                
-
-c                read(line, *) dummy, 
-cc   $                    ((gradient_qm(compteur + j  , i), j = 1, 5))
-
-c              found_gradient=.true.
-            
-
-            endif
-          enddo
-        close(429)
-        
+             endif
+           enddo
+         close(427)
+c
+c        else if(pyscf_qm) then
+c          open(428, file=qm_grad_filename, status='old')
+c          do 
+c            read(428, '(A)', iostat=iostat) line
+c            if (iostat /= 0) exit
+c            if (index(line, 'E(' // trim(method) // ') =') /= 0 .and.
+c     $                  .not. found_energy) then
+c              read(line(10:),*) energy
+c              found_energy=.true.
+c
+c            elseif (index(line,trim(method) // ' gradients') /= 0 .and. 
+c     $                  .not. found_atoms) then
+c              start_count = .true.
+c              count_lines = 1
+c              do while (start_count)
+c                read(428, '(A)', iostat=iostat) line
+c                  if (iostat /= 0 .or. index(line, '----') /= 0) then
+c                      start_count = .false.
+c                  else
+c                      count_lines = count_lines + 1
+c                  endif
+c              enddo
+c              number_atoms = count_lines - 2
+c              found_atoms = .true.
+c      
+c            rewind(428)
+c            elseif (index(line, 'gradients') /= 0 .and. 
+c     $            .not. found_gradient) then
+c              allocate(gradient_qm(number_atoms,3))
+c              read(428,'(A)', iostat=iostat) line 
+c              read(428,'(A)', iostat=iostat) line 
+c              do i=1, number_atoms
+c                read(line,*) dummy, dummy_char, gradient_qm(i,1) 
+c     $                  , gradient_qm(i,2), gradient_qm(i,3)
+c                read(428,'(A)', iostat=iostat) line
+c                gradient_qm(i,1) = gradient_qm(i,1) * hartree / bohr
+c                gradient_qm(i,2) = gradient_qm(i,2) * hartree / bohr
+c                gradient_qm(i,3) = gradient_qm(i,3) * hartree / bohr
+c              enddo
+c              found_gradient=.true. 
+c              
+c            endif
+c          enddo
+c        close(428)
+c
+c        else if(qchem_qm) then
+c          open(429, file=qm_grad_filename, status='old')
+c          do 
+c            read(429, '(A)', iostat=iostat) line
+c            if (iostat /= 0) exit
+c            if (index(line, 'total energy =') /= 0 .and.
+c     $                  .not. found_energy) then
+c              read(line(40:),*) energy
+c              found_energy=.true.
+c
+c            elseif (index(line,'Atom')  /= 0 .and. 
+c     $                  .not. found_atoms) then
+c              read(429,'(A)', iostat=iostat) line
+c              read(429,'(A)', iostat=iostat) line
+c              start_count = .true.
+c              count_lines = 1
+c              do while (start_count)
+c                read(429, '(A)', iostat=iostat) line 
+c                  if (iostat /= 0 .or. index(line, '----') /= 0) then
+c                      start_count = .false.
+c                  else
+c                      count_lines = count_lines + 1
+c                  endif
+c              enddo
+c              number_atoms = count_lines 
+c              found_atoms = .true.
+c
+c            write(*,*)'QCHEM GRADIENT READER NOT FIXED YET'  
+c     $            //  '- CHANGE SOFTWARE'
+c            call fatal
+c!               number_atoms=11
+c!               elseif (index(line, 'Full Analytical Gradient') /= 0 .and. 
+c!        $            .not. found_gradient) then
+c!                 read(429, '(A)', iostat=iostat) line
+c!                 read(429, '(A)', iostat=iostat) line 
+c!                 allocate(gradient_qm(number_atoms,3))
+c!                 total = int(number_atoms/5)
+c!                 compteur = 1
+c!                 write(*,*) total 
+c!   !
+c!                 write(*,*) number_atoms, compteur
+c!                 write(*,*) number_atoms/5
+c!                 do compteur=1, total
+c!                   do i = 1, 3
+c!                     read(line,*) dummy
+c!        $                , gradient_qm(1, i), gradient_qm(2,i)
+c!        $                , gradient_qm(3, i), gradient_qm(4,i)
+c!        $                , gradient_qm(5, i)                             
+c!                     read(429, '(A)', iostat=iostat) line 
+c!                     write(*,*) 
+c!        $                  gradient_qm(1, i), gradient_qm(2,i)
+c!        $                , gradient_qm(3, i), gradient_qm(4,i)
+c!        $                , gradient_qm(5, i)                             
+c!                   enddo
+c!                   read(429, '(A)', iostat=iostat) line 
+c!              enddo
+c                
+c
+cC                read(line, *) dummy, 
+cCc   $                    ((gradient_qm(compteur + j  , i), j = 1, 5))
+c
+cC              found_gradient=.true.
+c            
+c
+c            endif
+c          enddo
+c        close(429)
+c        
         endif
       else
         write(*,*) 'NO QM GRADIENT FILE FOUND'
