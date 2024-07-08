@@ -413,6 +413,18 @@
         sqrtnuinv = 1./sqrt(real(nu,r_p))
         ilocbeg=ilocpi_beg(rank_polymer+1)
         ilocend=ilocpi_end(rank_polymer+1)      
+
+!$acc wait
+!$acc update host(polymer%eigforces, forces)
+        DO k=1,nu
+          DO iloc=ilocbeg,ilocend
+            DO j=1,3
+              i=glob(iloc)
+              write(*,*) forces(j,i,k)
+              ENDDO
+            ENDDO
+          ENDDO
+
 !$acc parallel loop collapse(3) async default(present)
         DO k=1,nu; DO iloc=ilocbeg,ilocend ; DO j=1,3
           i=glob(iloc)

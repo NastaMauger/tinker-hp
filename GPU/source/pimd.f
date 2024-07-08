@@ -381,10 +381,6 @@ c
 
         ! perform a step of PIMD integration
         if(integrate.eq.'BAOAB') then
-          if (aiMD) then
-            call write_qm_inputs()
-            compteur_aimd = compteur_aimd + 1
-          endif
           call baoabpi(istep,dt)
         elseif(integrate.eq.'BAOABRESPA') then
           call baoabrespapi(istep,dt)

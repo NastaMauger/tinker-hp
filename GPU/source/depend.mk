@@ -1,4 +1,4 @@
-MOD_abinitio.o: MOD_domdec.o
+MOD_abinitio.o: MOD_domdec.o MOD_commstuffpi.o
 MOD_beads.o: MOD_dcdio.o
 MOD_couple.o: MOD_sizes.o
 MOD_commstuffpi.o: MOD_beads.o MOD_qtb.o

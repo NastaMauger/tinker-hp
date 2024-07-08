@@ -50,8 +50,39 @@ c
       real(r_p), intent(in) :: dt
       integer :: nu,iloc, i,j,k,ilocbeg
 
+
       nu=polymer%nbeads
       ilocbeg = ilocpi_beg(rank_polymer+1)
+!$acc wait
+!$acc update host (polymer%forces, polymer%eigforces, polymer%pos)
+!$acc update host (polymer%eigpos, polymer%vel, polymer%eigvel)
+        write(*,*) 'polymer%forces IN B'
+      do k=1,nu; do iloc=1,nlocpi; do j=1,3
+        i=glob(iloc+ilocbeg-1)
+        write(*,*) polymer%forces(j,i,k)
+      enddo; enddo; enddo
+ 
+        write(*,*) '                   '
+        write(*,*) 'polymer%eigforces IN B'
+      do k=1,nu; do iloc=1,nlocpi; do j=1,3
+        i=glob(iloc+ilocbeg-1)
+        write(*,*) polymer%eigforces(j,i,k)
+      enddo; enddo; enddo
+ 
+c        write(*,*) '                   '
+c        write(*,*) 'polymer%pos IN B'
+c      do k=1,nu; do iloc=1,nlocpi; do j=1,3
+c        i=glob(iloc+ilocbeg-1)
+c        write(*,*) polymer%pos(j,i,k)
+c      enddo; enddo; enddo 
+c
+c        write(*,*) '                   '
+c        write(*,*) 'polymer%eigpos IN B'
+c      do k=1,nu; do iloc=1,nlocpi; do j=1,3
+c        i=glob(iloc+ilocbeg-1)
+c        write(*,*) polymer%eigpos(j,i,k)
+c      enddo; enddo; enddo 
+ 
 !$acc parallel loop collapse(3) default(present) async
       do k=1,nu; do iloc=1,nlocpi; do j=1,3
         i=glob(iloc+ilocbeg-1)
@@ -82,6 +113,7 @@ c
         real(r_p) :: dt2, eigx0,eigv0,gammak,a1,a2,cayfact
         integer :: ilocbeg,inoise
 
+        write(*,*) 'AOA STEP'
         nu=polymer%nbeads
         dt2=0.5d0*dt
         if (piqtb) then
