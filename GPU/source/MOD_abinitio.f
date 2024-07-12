@@ -720,16 +720,28 @@ c      endif
       integer :: nstep
       character*240  command_1
       character*240  command_2
+      character*240  command_2b
       character*240  command_3
+      character*240  command_3b
       character*40 nstep_str
 
 
       do i=0,nstep
         write(nstep_str, '(I10)') i
-        command_1= 'mkdir timestep_' // trim(adjustl(nstep_str))
+        command_1= 'mkdir -p  timestep_' // trim(adjustl(nstep_str))
         call execute_command_line(command_1)
-        write(command_2, '(A, A, A)') 'mv orca_', 
-     $      trim(adjustl(nstep_str)), '*'
+        if(i==0) then
+          write(command_2, '(A, A, A)') 'mv orca_', 
+     $      trim(adjustl(nstep_str)), '.*'
+          write(command_2b, '(A, A, A)') 'mv orca_', 
+     $      trim(adjustl(nstep_str)), '_*'
+            command_3b = trim(adjustl(command_2b)) // ' timestep_' //
+     $      trim(adjustl(nstep_str))
+            call execute_command_line(command_3b)
+        else 
+          write(command_2, '(A, A, A)') 'mv orca_', 
+     $      trim(adjustl(nstep_str)), '_beads*'
+        endif
         command_3 = trim(adjustl(command_2)) // ' timestep_' //
      $      trim(adjustl(nstep_str))
       call execute_command_line(command_3)
