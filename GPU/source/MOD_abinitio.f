@@ -23,6 +23,7 @@ c
       logical qm_input_file_found
       logical qm_grad_file_found
       real(r_p), allocatable :: gradient_qm(:,:)
+      real :: energy_qm
       logical :: orca_qm, g16_qm, psi4_qm, pyscf_qm, qchem_qm
 
       integer :: nprocs
@@ -35,6 +36,7 @@ c
       character*40 filename_pyscf
       character*40 filename_qchem
       character*40 qm_input_filename
+      character*40 qm_output_filename
       character*40 qm_grad_filename
 
       character*40 compteur_aimd_str
@@ -131,7 +133,6 @@ c
 
       subroutine write_qm_inputs(polymer,istep,nbeadsloc,nloc) 
       use beads
-      use commstuffpi
       implicit none
       type(POLYMER_COMM_TYPE), intent(inout) :: polymer
       integer :: nbeadsloc, iloc, nloc
@@ -148,29 +149,6 @@ c
       compteur_aimd = istep
 
       write(compteur_aimd_str, '(I10)') compteur_aimd
-
-      if (compteur_aimd .gt. 0) then
-          if (orca_qm == .true.) then
-            qm_input_filename = 'orca_0.inp'
-          
-          else if(g16_qm == .true.) then
-            qm_input_filename = 'g16_0.inp'
-
-          else if(psi4_qm == .true.) then
-            qm_input_filename = 'psi4_0.inp'
-
-          else if(pyscf_qm == .true.) then
-            qm_input_filename = 'pyscf_0.inp'
-
-          else if(qchem_qm == .true.) then
-            qm_input_filename = 'qchem_0.inp'
-          endif
-        inquire(file=qm_input_filename, exist=qm_input_file_found)
-        if(.NOT. qm_input_file_found) then
-          write(*,*) 'NEED AN INITIAL QM INPUT FILE'
-          call fatal
-        endif
-      endif
 
       if (qm_input_file_found  .and.
      $        orca_qm) then
@@ -330,20 +308,65 @@ c
       end subroutine write_qm_inputs
 
 
-      subroutine launch_qm_software
+      subroutine launch_qm_software(nbeadsloc, nloc)
       implicit none
+      integer :: k
+      integer iqm, freeunit
+      integer :: nbeadsloc, iloc, nloc
+      character*3 :: k_str
       character*240  command
 
+      write(compteur_aimd_str, '(I10)') compteur_aimd
 
-!!      if (compteur_aimd == 0) then
-!!       if (orca_qm) then
-!!        write(*,*) 'ORCA FILENAME = ', filename_orca 
-!!               command = "$(which orca) filename_orca > orca_0.out"
-!!               call system(command)
-!!        endif
-!!      endif
-              
+      if (compteur_aimd == 0) then
+          if (orca_qm == .true.) then
+            qm_input_filename = 'orca_0.inp'
+            qm_output_filename = 'orca_0.out'
+          
+          else if(g16_qm == .true.) then
+            qm_input_filename = 'g16_0.inp'
+            qm_output_filename = 'g16_0.out'
 
+          else if(psi4_qm == .true.) then
+            qm_input_filename = 'psi4_0.inp'
+            qm_output_filename = 'psi4_0.out'
+
+          else if(pyscf_qm == .true.) then
+            qm_input_filename = 'pyscf_0.inp'
+            qm_output_filename = 'pyscf_0.out'
+
+          else if(qchem_qm == .true.) then
+            qm_input_filename = 'qchem_0.inp'
+            qm_output_filename = 'qchem_0.out'
+          endif
+      endif
+
+      if(compteur_aimd  .gt. 0) then
+        if (orca_qm == .true.) then
+          do k=1, nbeadsloc
+            write(k_str, '(I3.3)') k
+            qm_input_filename = 'orca_'
+     $        // trim(adjustl(compteur_aimd_str)) // '_beads'
+     $        // trim(adjustl(k_str)) // '.inp'
+            qm_output_filename = 'orca_'
+     $        // trim(adjustl(compteur_aimd_str)) // '_beads'
+     $        // trim(adjustl(k_str)) // '.out'
+          enddo
+        endif
+      endif
+
+      inquire(file=qm_input_filename, exist=qm_input_file_found)
+      if(.NOT. qm_input_file_found) then
+        write(*,*) 'NEED AN INITIAL QM INPUT FILE'
+      endif
+
+      if (orca_qm) then
+        command='$(which orca) ' // qm_input_filename // '> '
+     $            // qm_output_filename 
+      endif
+
+      call execute_command_line(command)
+      
       end subroutine launch_qm_software
 
 
@@ -355,7 +378,6 @@ c
       integer :: number_atoms
       logical :: found_energy, found_gradient, found_atoms
       integer iqm, freeunit
-      real :: energy
       real(r_p), allocatable :: grad(:,:)
       integer :: nbeadsloc, iloc, nloc
       character*40 energy_str 
@@ -391,14 +413,16 @@ c
      $           // trim(adjustl(compteur_aimd_str)) // '.out'
           
         endif
-      else
+      endif
+
+      if (compteur_aimd .gt. 0 ) then
         if (orca_qm == .true.) then
           do k=1, nbeadsloc
             write(k_str, '(I3.3)') k
-            iqm = freeunit()
+c            iqm = freeunit()
             qm_grad_filename = 'orca_'
      $        // trim(adjustl(compteur_aimd_str)) // '_beads'
-     $        // trim(adjustl(k_str)) // '.inp'
+     $        // trim(adjustl(k_str)) // '.engrad'
           enddo
         endif
       endif
@@ -407,7 +431,6 @@ c
 
       inquire(file=qm_grad_filename, exist=qm_grad_file_found)
       if(qm_grad_file_found) then 
-        write(*,*) 'READING GRADIENT FROM ', qm_grad_filename
         if(orca_qm) then
           open(iqm, file=qm_grad_filename, status='old')
           do 
@@ -417,7 +440,7 @@ c
      $            .not. found_energy) then
               read(iqm,'(A)', iostat=iostat) line 
               read(iqm,'(A)', iostat=iostat) line 
-              read(line,*) energy   
+              read(line,*) energy_qm 
               found_energy=.true.
 
             else if (index(line, 'Number of atoms') /= 0 .and. 
@@ -478,7 +501,7 @@ c                   exit
 c                 endif
 c               enddo
 c               energy_str = line(pos_start:pos_end)
-c               read(energy_str,*) energy
+c               read(energy_str,*) energy_qm
 c               found_energy=.true.
 c 
 c             else if (index(line, 'NAtoms=') /= 0 .and. 
@@ -528,7 +551,7 @@ c                do i=1,6
 c                  read(427,'(A)', iostat=iostat) line 
 c                enddo
 c                read(line(40:), *) energy_str 
-c                read(energy_str,*) energy
+c                read(energy_str,*) energy_qm
 c                found_energy = .true.
 c
 c            else if (index(line, 'Number of atoms') /= 0 .and. 
@@ -675,12 +698,11 @@ c
         call fatal()
       endif
 
-      if (found_energy) then
-        write(*,*) 'ENERGY = ', energy
-      endif
-      if (found_atoms) then
-        write(*,*) 'NUMBER OF ATOMS = ', number_atoms
-      endif
+c      if (found_energy) then
+c      endif
+c      if (found_atoms) then
+c        write(*,*) 'NUMBER OF ATOMS = ', number_atoms
+c      endif
       if (found_gradient) then
            write(*,*) 'Gradient values:'
            do i = 1, number_atoms 
@@ -689,9 +711,32 @@ c
            enddo
       endif
 
-
-
       end subroutine get_gradient_from_qm
 
+
+      subroutine organized_qm_files(nstep)
+      implicit none
+      integer :: i
+      integer :: nstep
+      character*240  command_1
+      character*240  command_2
+      character*240  command_3
+      character*40 nstep_str
+
+
+      do i=0,nstep
+        write(nstep_str, '(I10)') i
+        command_1= 'mkdir timestep_' // trim(adjustl(nstep_str))
+        call execute_command_line(command_1)
+        write(command_2, '(A, A, A)') 'mv orca_', 
+     $      trim(adjustl(nstep_str)), '*'
+        command_3 = trim(adjustl(command_2)) // ' timestep_' //
+     $      trim(adjustl(nstep_str))
+      call execute_command_line(command_3)
+      enddo
+c
+      
+      end subroutine organized_qm_files
+      
       end module abinitio
 

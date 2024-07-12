@@ -198,7 +198,7 @@ c
 !$acc wait
 !$acc update self(polymer%forces)
           compteur_aimd =0
-cc          call launch_qm_software
+          call launch_qm_software(nbeadsloc, nloc)
           call get_gradient_from_qm(nbeadsloc, nloc)
           do ibead = 1, nbeads
             do i = 1, n
@@ -245,7 +245,7 @@ cc          call launch_qm_software
        call set_eigforces_pi(polymer,polymer%forces)
       endif
 
-      if(restart .and. .not. aiMD) then
+      if(restart) then
         if(integrate.eq.'BAOABRESPA') then
           call set_eigforces_pi(polymer,polymer%forces_slow)
         else

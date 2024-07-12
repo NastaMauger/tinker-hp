@@ -405,6 +405,23 @@
       integer :: i,j,k,ibead,iloc,ilocbeg,ilocend,nu
       real(r_p) :: sqrtnuinv
 
+cc!$acc wait
+cc!$acc update self(polymer%eigforces)
+cc        nu=polymer%nbeads
+cc        sqrtnuinv = 1./sqrt(real(nu,r_p))
+cc        ilocbeg=ilocpi_beg(rank_polymer+1)
+cc        ilocend=ilocpi_end(rank_polymer+1)      
+cc        write(*,*) 'IN SET EIGFORCES BEG'
+cc        DO k=1,nu; DO iloc=ilocbeg,ilocend ; DO j=1,3
+cc          i=glob(iloc)
+cc          write(*,*) polymer%eigforces(j,i,k)
+cc        ENDDO ; ENDDO ; ENDDO 
+cc        write(*,*) 'IN SET FORCES BEG'
+cc        DO k=1,nu; DO iloc=ilocbeg,ilocend ; DO j=1,3
+cc          i=glob(iloc)
+cc          write(*,*) polymer%forces(j,i,k)
+cc        ENDDO ; ENDDO ; ENDDO 
+
         if (deb_Path) then
 !$acc wait
           write(*,*) '   >> set_eigforces_pi'
@@ -413,18 +430,6 @@
         sqrtnuinv = 1./sqrt(real(nu,r_p))
         ilocbeg=ilocpi_beg(rank_polymer+1)
         ilocend=ilocpi_end(rank_polymer+1)      
-
-!$acc wait
-!$acc update host(polymer%eigforces, forces)
-        DO k=1,nu
-          DO iloc=ilocbeg,ilocend
-            DO j=1,3
-              i=glob(iloc)
-              write(*,*) forces(j,i,k)
-              ENDDO
-            ENDDO
-          ENDDO
-
 !$acc parallel loop collapse(3) async default(present)
         DO k=1,nu; DO iloc=ilocbeg,ilocend ; DO j=1,3
           i=glob(iloc)
@@ -440,6 +445,15 @@
 !$acc wait
           write(*,*) '   << set_eigforces_pi'
         endif
+
+cc!$acc wait
+cc!$acc update self(polymer%eigforces)
+cc        write(*,*) 'IN SET EIGFORCES END'
+cc        DO k=1,nu; DO iloc=ilocbeg,ilocend ; DO j=1,3
+cc          i=glob(iloc)
+cc          write(*,*) polymer%eigforces(j,i,k)
+cc        ENDDO ; ENDDO ; ENDDO 
+  
 
       end subroutine set_eigforces_pi
 
@@ -771,7 +785,6 @@
       gyrpi=0.d0
 !$acc end serial  
 
-
       ilocbeg = ilocpi_beg(rank_polymer+1)
 !$acc parallel loop collapse(3) async default(present)
       DO k=1,nu; DO iloc=1,nlocpi ; DO j=1,3
@@ -805,6 +818,8 @@
         end if
         endif
       ENDDO ; ENDDO ; ENDDO  
+
+
 
       if(nu==1) then
 !$acc serial async

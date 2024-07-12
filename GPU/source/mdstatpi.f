@@ -17,6 +17,7 @@ c
 c
 #include "tinker_precision.h"
       subroutine mdstatpi (istep,dt)
+      use abinitio
       use sizes
       use atoms
       use bath
@@ -50,7 +51,9 @@ c
       real(d_prec) potfluctpi,potfluct2pi
       real(d_prec) kinfluctpi,kinfluct2pi
       real(d_prec) tfluctpi,pfluctpi,dfluctpi,volfluctpi
+      real(d_prec) tfluctpicl
       real(d_prec) tfluct2pi,pfluct2pi,dfluct2pi,volfluct2pi
+      real(d_prec) tfluct2picl
       real(d_prec) gyrfluctpi,gyrfluct2pi
       real(d_prec) Tcentroidfluct,Tcentroidfluct2,Tcentroid
       real(d_prec) etotpi_ave,etot2pi_ave
@@ -58,6 +61,7 @@ c
       real(d_prec) epotpi_ave,epot2pi_ave
       real(d_prec) ekinpi_ave,ekin2pi_ave
       real(d_prec) temppi_ave,temp2pi_ave
+      real(d_prec) temppicl_ave,temp2picl_ave
       real(d_prec) prespi_ave,pres2pi_ave
       real(d_prec) denspi_ave,dens2pi_ave
       real(d_prec) volpi_ave,vol2pi_ave
@@ -71,6 +75,7 @@ c
       real(d_prec),save :: epotpi_sum,epot2pi_sum
       real(d_prec),save :: ekinpi_sum,ekin2pi_sum
       real(d_prec),save :: temppi_sum,temp2pi_sum
+      real(d_prec),save :: temppicl_sum,temp2picl_sum
       real(d_prec),save :: prespi_sum,pres2pi_sum
       real(d_prec),save :: denspi_sum,dens2pi_sum
       real(d_prec),save :: volpi_sum,vol2pi_sum
@@ -89,9 +94,11 @@ c
       character(2) :: esize
       character(5) :: f_ener
 
+
       esize='14'
       if (n>5d6) esize='17'
       f_ener = 'f'//esize//'.'//edcim
+
 
 c
 c
@@ -126,6 +133,8 @@ c
          eint2pi_sum = 0.0_d_prec
          temppi_sum = 0.0_d_prec
          temp2pi_sum = 0.0_d_prec
+         temppicl_sum = 0.0_d_prec
+         temp2picl_sum = 0.0_d_prec
          prespi_sum = 0.0_d_prec
          pres2pi_sum = 0.0_d_prec
          denspi_sum = 0.0_d_prec
@@ -157,34 +166,53 @@ c        dens = (1.0d24/real(volbox,d_prec))
 c     &          * (real(totmass,d_prec)/real(avogadro,d_prec))
         if (verbose) then
           if(modstep==1) then
-            write(iout,'(A)',advance="no") "    MD Step"
-     &                  //"      E total"
-     &                  //"   E Potential"            
-     &                  //"     E Kinetic"
-c     &                  //"     Ek prim"
-     &                  //"       Temp"
-     &                  //"    Temp_cl"
-            if(use_virial) then
-              write(iout,'(A)',advance="no") "       Pres"
-            endif
+            if(.not. aiMD) then
+              write(iout,'(A)',advance="no") "    MD Step"
+     &                    //"      E total"
+     &                    //"   E Potential"            
+     &                    //"     E Kinetic"
+c     &                    //"     Ek prim"
+     &                    //"       Temp"
+     &                    //"    Temp_cl"
+              if(use_virial) then
+                write(iout,'(A)',advance="no") "       Pres"
+              endif
 c            if(isobaric) then
 c              write(iout,'(A)',advance="no") 
 c     &                    "     Density"
 c     &                  //"      Volume"
 c            endif
+            endif
+            if (aiMD) then
+              write(iout,'(A)',advance="no") "    MD Step"
+     &                    //"      E total"
+     &                    //"   E Potential"            
+     &                    //"     E Kinetic"
+c     &                    //"     Ek prim"
+     &                    //"       Temp"
+     &                    //"    Temp_cl"
+     &                    //"     QM Energy (a.u)"
+            endif
             write(iout,*)
           endif
           if (display) then
-            write(iout,'(i10,3'//f_ener//',2f11.2)',advance="no") istep
-     &                 ,ekvir+epotpi,epotpi,ekvir !,ekprim
+            if(.not. aiMD) then
+              write(iout,'(i10,3'//f_ener//',2f11.2)',advance="no")
+     &                 istep,ekvir+epotpi,epotpi,ekvir !,ekprim
      &                 ,temppi,temppi_cl/nbeads
-            if(use_virial) then
-              write(iout,'(f11.2)',advance="no") presvir
-            endif
+              if(use_virial) then
+                write(iout,'(f11.2)',advance="no") presvir
+              endif
 c            if(isobaric) then
 c              write(iout,'(f12.4,f12.2)',advance="no") dens,volbox
 c            endif
-            write(iout,*)
+            endif
+            if(aiMD) then
+         write(iout,'(i10,3'//f_ener//',2f11.2,9X, f11.5)',advance="no")
+     &                 istep,ekvir+epotpi,epotpi,ekvir !,ekprim
+     &                 ,temppi,temppi_cl/nbeads, energy_qm
+            endif
+              write(iout,*)
           endif
         end if
 
@@ -299,6 +327,24 @@ c
            end if
            write (iout,310)  temppi_ave,tfluctpi
   310      format (' Temperature',9x,f15.2,' Kelvin',6x,
+     &                '(+/-',f9.2,')')
+        end if
+
+        if (display) then
+        temppicl_sum = temppicl_sum + (temppi_cl/nbeads)
+        temp2picl_sum = temp2picl_sum + (temppi_cl/nbeads)**2
+        endif
+        if (verbose.and.modstep .eq. 0) then
+           temppicl_ave = temppicl_sum / real(count,d_prec)
+           temp2picl_ave = temp2picl_sum / real(count,d_prec)
+           tfluct2picl = temp2picl_ave - temppicl_ave**2
+           if (tfluct2picl .gt. 0.0_d_prec) then
+              tfluctpicl = sqrt(tfluct2pi)
+           else
+              tfluctpicl = 0.0_d_prec
+           end if
+           write (iout,390)  temppicl_ave,tfluctpicl
+  390      format (' Temperature Classic',1x,f15.2,' Kelvin',6x,
      &                '(+/-',f9.2,')')
         end if
 

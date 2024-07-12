@@ -94,97 +94,49 @@ c
       if(PITIMER) call stopwatchpi(timeaoa,.false.,.false.)
 
       call full_gradient_prepare_pi(polymer,polymer_ctr,istep,.false.)
-
       if(PITIMER) call stopwatchpi(timecom,.false.,.false.)
-                          
+
+      !!! COMPUTE FORCES ON CENTROID!!!  
+      if(centroid_recip .and. .not. aiMD) then
+        call prmem_requestm(derivs_centroid,3,nbloc,async=.TRUE.)
+        call load_bead(polymer,0)
+        only_long = centroid_longrange .and.
+     &      (.not. (contract.and.nbeads_ctr==1) )
+        call compute_gradslow_centroid(eslow,derivs_centroid
+     &            ,vir_ctr,only_long, polar_allbeads)
+        if(PITIMER) call stopwatchpi(timecontract,.false.,.false.)
+        call commforcesrespa1(derivs_centroid,2)
+        if(PITIMER) call stopwatchpi(timecom,.true.,.false.)
+        if (deb_Energy) call info_energy(rank)
+        if (deb_Force)  then
+          call info_forces(cNBond)
+          if(ranktot==0) write(*,*) 'were Forces for centroid:'
+        endif
+        if (deb_Atom)   call info_minmax_pva
+      endif
+
       if (.not. aiMD) then
-
-c        !!! COMPUTE FORCES ON CENTROID!!!  
-c        if(centroid_recip) then
-c          call prmem_requestm(derivs_centroid,3,nbloc,async=.TRUE.)
-c          call load_bead(polymer,0)
-c          only_long = centroid_longrange .and.
-c     &        (.not. (contract.and.nbeads_ctr==1) )
-c          call compute_gradslow_centroid(eslow,derivs_centroid
-c     &              ,vir_ctr,only_long, polar_allbeads)
-c          if(PITIMER) call stopwatchpi(timecontract,.false.,.false.)
-c          call commforcesrespa1(derivs_centroid,2)
-c          if(PITIMER) call stopwatchpi(timecom,.true.,.false.)
-c          if (deb_Energy) call info_energy(rank)
-c          if (deb_Force)  then
-c            call info_forces(cNBond)
-c            if(ranktot==0) write(*,*) 'were Forces for centroid:'
-c          endif
-c          if (deb_Atom)   call info_minmax_pva
-c        endif
-
         !!! COMPUTE FORCES ON BEADS!!!  
         call prmem_requestm(derivs,3,nbloc,nbeadsloc,async=.true.)
         call compute_grad_beads(epotpi,derivs,virpi,polymer
-     &           ,.not. (centroid_longrange .or. contract)  !LONG 
-     &           ,.not. contract ! INT
-     &           , .TRUE.     !SHORT 
-     &           ,polar_allbeads)
-
+     &         ,.not. (centroid_longrange .or. contract)  !LONG 
+     &         ,.not. contract ! INT
+     &         , .TRUE.     !SHORT 
+     &         ,polar_allbeads)
+  
         if(PITIMER) call stopwatchpi(timegrad,.false.,.false.)
         if(.not.(centroid_recip .or. contract))
-     &      call commforcesrecpi(derivs,derivsRec,nbeadsloc)
+     &    call commforcesrecpi(derivs,derivsRec,nbeadsloc)
         call commforcesblocpi(derivs,nbeadsloc,.FALSE.)  
-
+  
         ibeadbeg=polymer%ibead_beg(rank_polymer+1)
-!$acc parallel loop collapse(3) async default(present)
+ccc!$acc parallel loop collapse(3) async default(present)
         DO k=1,nbeadsloc; DO iloc=1,nloc ; DO j=1,3
           i=glob(iloc)
           polymer%forces(j,i,k+ibeadbeg-1) = -derivs(j,iloc,k)
         ENDDO ; ENDDO ; ENDDO
-
-c        !! ADD CENTROID CONTRIBUTION TO ENERGY AND FORCES !!
-c        if(centroid_recip) then 
-c          if(rank_polymer==0) then
-c!$acc serial async present(epotpi,eslow,vir_ctr,virpi)
-c            epotpi = epotpi + eslow
-c            do j=1,3; do i=1,3
-c              virpi(i,j) = virpi(i,j) + vir_ctr(i,j)
-c            enddo; enddo
-c!$acc end serial  
-c          endif  
-c!$acc parallel loop collapse(3) async default(present)
-c          DO k=1,nbeadsloc; DO iloc=1,nloc ; DO j=1,3
-c            i=glob(iloc)
-c            polymer%forces(j,i,k+ibeadbeg-1) = 
-c     &        polymer%forces(j,i,k+ibeadbeg-1)
-c     &                   -derivs_centroid(j,iloc) 
-c          ENDDO ; ENDDO ; ENDDO
-c        endif
-c
-c        call comm_for_normal_modes(polymer,polymer%forces)
-c        if(PITIMER) call stopwatchpi(timecom,.true.,.false.)
-
-c        !!! COMPUTE FORCES ON  CONTRACTED BEADS!!!  
-c        if(contract .and. nbeads_ctr>1) then
-c
-c          call prmem_requestm(derivs_ctr,3,nbloc
-c     &        ,nbeadsloc_ctr,async=.true.)
-c          call compute_grad_beads(eslow,derivs_ctr,vir_ctr,polymer_ctr
-c     &        ,.not.centroid_longrange, .TRUE., .FALSE.  ![LONG, INT  , SHORT]
-c     &        ,polar_allbeads)
-c!$acc serial async present(epotpi,eslow,vir_ctr,virpi)
-c          epotpi = epotpi + eslow
-c          do j=1,3; do i=1,3
-c            virpi(i,j) = virpi(i,j) + vir_ctr(i,j)
-c          enddo; enddo
-c!$acc end serial
-c        if(PITIMER) call stopwatchpi(timecontract,.false.,.false.)
-c      
-c          if(.not.centroid_recip)
-c     &      call commforcesrecpi(derivs_ctr,derivsRec,nbeadsloc_ctr)
-c          call commforcesblocpi(derivs_ctr,nbeadsloc_ctr,.FALSE.)
-c          call commforces_ctr(polymer_ctr,derivs_ctr)
-c          call project_forces_ctr(polymer,polymer_ctr)
-c          if(PITIMER) call stopwatchpi(timecom,.true.,.false.)
-c        endif
       endif
-      
+
       if (aiMD) then 
         if(register_coord) then
 !$acc update host(polymer%pos)
@@ -205,16 +157,105 @@ c        endif
           enddo
         endif
         call write_qm_inputs(polymer,istep,nbeadsloc,nloc)
-c       launch_qm
+        call launch_qm_software(nbeadsloc, nloc) 
         call get_gradient_from_qm(nbeadsloc,nloc)
-
-c        ibeadbeg=polymer%ibead_beg(rank_polymer+1)
-c!$acc parallel loop collapse(3) async default(present)
-c        DO k=1,nbeadsloc; DO iloc=1,nloc ; DO j=1,3
-c          i=glob(iloc)
-c          polymer%forces(j,i,k+ibeadbeg-1) = gradient_qm(i,j)
-c        ENDDO ; ENDDO ; ENDDO
+!$acc wait
+        ibeadbeg=polymer%ibead_beg(rank_polymer+1)
+        DO k=1,nbeadsloc  
+          DO iloc=1,nloc 
+            DO j=1,3
+              i=glob(iloc)
+              polymer%forces(j,i,k+ibeadbeg-1) = gradient_qm(i,j)
+            ENDDO  
+          ENDDO 
+!$acc update device(polymer%forces)
+        ENDDO
       endif
+
+cc
+cc      !! ADD CENTROID CONTRIBUTION TO ENERGY AND FORCES !!
+cc      if(centroid_recip .and. .not. aiMD) then 
+cc        if(rank_polymer==0) then
+cc!$acc serial async present(epotpi,eslow,vir_ctr,virpi)
+cc          epotpi = epotpi + eslow
+cc          do j=1,3; do i=1,3
+cc            virpi(i,j) = virpi(i,j) + vir_ctr(i,j)
+cc          enddo; enddo
+cc!$acc end serial  
+cc        endif  
+cc!$acc parallel loop collapse(3) async default(present)
+cc        DO k=1,nbeadsloc; DO iloc=1,nloc ; DO j=1,3
+cc          i=glob(iloc)
+cc          polymer%forces(j,i,k+ibeadbeg-1) = 
+cc     &       polymer%forces(j,i,k+ibeadbeg-1)
+cc     &                   -derivs_centroid(j,iloc) 
+cc        ENDDO ; ENDDO ; ENDDO
+cc      endif
+cc
+      call comm_for_normal_modes(polymer,polymer%forces)
+      if(PITIMER) call stopwatchpi(timecom,.true.,.false.)
+cc
+cc      !!! COMPUTE FORCES ON  CONTRACTED BEADS!!!  
+cc      if(contract .and. nbeads_ctr>1 .and. .not. aiMD) then
+cc
+cc        call prmem_requestm(derivs_ctr,3,nbloc
+cc     &      ,nbeadsloc_ctr,async=.true.)
+cc        call compute_grad_beads(eslow,derivs_ctr,vir_ctr,polymer_ctr
+cc     &       ,.not.centroid_longrange, .TRUE., .FALSE.  ![LONG, INT  , SHORT]
+cc     &       ,polar_allbeads)
+cc!$acc serial async present(epotpi,eslow,vir_ctr,virpi)
+cc        epotpi = epotpi + eslow
+cc        do j=1,3; do i=1,3
+cc          virpi(i,j) = virpi(i,j) + vir_ctr(i,j)
+cc        enddo; enddo
+cc!$acc end serial
+cc      if(PITIMER) call stopwatchpi(timecontract,.false.,.false.)
+cc      
+cc        if(.not.centroid_recip)
+cc     &     call commforcesrecpi(derivs_ctr,derivsRec,nbeadsloc_ctr)
+cc        call commforcesblocpi(derivs_ctr,nbeadsloc_ctr,.FALSE.)
+cc        call commforces_ctr(polymer_ctr,derivs_ctr)
+cc        call project_forces_ctr(polymer,polymer_ctr)
+cc        if(PITIMER) call stopwatchpi(timecom,.true.,.false.)
+cc      endif
+
+cc      if (aiMD) then 
+cc        if(register_coord) then
+cc!$acc update host(polymer%pos)
+cc          do k=1,nbeadsloc  
+cc            iqm = freeunit()
+cc            write(filename, '(A,I0.3,A)') 'coordinates_beads'
+cc     $              ,k ,'.xyz'
+cc            open(iqm, file=filename, status='unknown',
+cc     $            action='write', position='append')
+cc            write(iqm,'(A,I0)') 'Coordinates for istep = ', istep
+cc            do iloc=1,nloc 
+cc              write(iqm, '(F18.12,1X, F18.12,1X,F18.12)') 
+cc     $                             polymer%pos(1,iloc,k) 
+cc     $                            ,polymer%pos(2,iloc,k) 
+cc     $                            ,polymer%pos(3,iloc,k) 
+cc            enddo
+cc          close(iqm)
+cc          enddo
+cc        endif
+cc        call write_qm_inputs(polymer,istep,nbeadsloc,nloc)
+cc        call launch_qm_software(nbeadsloc, nloc) 
+cc        call get_gradient_from_qm(nbeadsloc,nloc)
+cc
+cc
+cc!$acc wait
+cc!$acc update self(polymer%forces)
+cc        ibeadbeg=polymer%ibead_beg(rank_polymer+1)
+cc        DO k=1,nbeadsloc  
+cc          DO iloc=1,nloc 
+cc            DO j=1,3
+cc              i=glob(iloc)
+cc              polymer%forces(j,i,k+ibeadbeg-1) = gradient_qm(i,j)
+cc            ENDDO  
+cc          ENDDO 
+cc!$acc update device(polymer%forces)
+cc        ENDDO
+cc      endif
 
       call set_eigforces_pi(polymer,polymer%forces)
       call apply_B_PI(polymer,dt2)
@@ -278,4 +319,5 @@ c     &         , timepush/iprint, ' ( ',100*timepush/timefull,' %)'
       endif
 
       end subroutine baoabpi
+
 

@@ -16,7 +16,6 @@ c
 c
 #include "tinker_precision.h"
       subroutine readxyz (ixyz)
-      use abinitio
       use atmtyp
       use atoms
       use atomsMirror,only:xm=>x,ym=>y,zm=>z
@@ -51,9 +50,6 @@ c
       character*240 xyzfile
       character*240 record
       character*240 string
- 
-      integer number_qm_file
-      character*1 name_first
 c
       call timer_enter(timer_io)
 c
@@ -199,7 +195,6 @@ c
             if (i .eq. 1) then
                next = 1
                call getword (record,name(i),next)
-               name_first=name(i)
                if (name(i) .ne. '   ')  goto 60
                read (record,*,err=60,end=60)  xlen,ylen,zlen,
      &                                        aang,bang,gang
@@ -223,36 +218,8 @@ c               call lattice
      &                                  (i12(j,i),j=1,maxvalue)
    70    continue
       end do
-
+!$acc update device(type)
 !$acc update device(xm,ym,zm)
-
-      if (aiMD) then
-        if (orca_qm) then
-          number_qm_file=415
-        elseif (g16_qm) then
-          number_qm_file=416
-        elseif (psi4_qm) then
-          number_qm_file=417
-        elseif (pyscf_qm) then
-          number_qm_file=418
-        elseif (qchem_qm) then
-          number_qm_file=419
-        else
-          number_qm_file=-1
-        endif
-!$acc update host(xm, ym, zm)
-        do i = 1, n
-          if (i == 1) then
-            write(number_qm_file,'(A,3(F10.4, 1X))') trim(name_first)
-     &                                                ,xm(i),ym(i),zm(i)
-          else
-            write(number_qm_file,'(A,3(F10.4,1X))') trim(name(i))
-     &                                                ,xm(i),ym(i),zm(i)
-          endif
-        end do
-      endif
-
-
 
       ! Init Wrapping state buffer
       if (app_id.eq.dynamic_a) then
@@ -385,3 +352,4 @@ c
 
       call timer_exit(timer_io)
       end
+
