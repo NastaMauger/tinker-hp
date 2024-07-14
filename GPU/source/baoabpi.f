@@ -130,36 +130,22 @@ c
         call commforcesblocpi(derivs,nbeadsloc,.FALSE.)  
   
         ibeadbeg=polymer%ibead_beg(rank_polymer+1)
-ccc!$acc parallel loop collapse(3) async default(present)
+!$acc parallel loop collapse(3) async default(present)
         DO k=1,nbeadsloc; DO iloc=1,nloc ; DO j=1,3
           i=glob(iloc)
           polymer%forces(j,i,k+ibeadbeg-1) = -derivs(j,iloc,k)
         ENDDO ; ENDDO ; ENDDO
       endif
 
+
+
       if (aiMD) then 
-        if(register_coord) then
 !$acc update host(polymer%pos)
-          do k=1,nbeadsloc  
-            iqm = freeunit()
-            write(filename, '(A,I0.3,A)') 'coordinates_beads'
-     $              ,k ,'.xyz'
-            open(iqm, file=filename, status='unknown',
-     $            action='write', position='append')
-            write(iqm,'(A,I0)') 'Coordinates for istep = ', istep
-            do iloc=1,nloc 
-              write(iqm, '(F18.12,1X, F18.12,1X,F18.12)') 
-     $                             polymer%pos(1,iloc,k) 
-     $                            ,polymer%pos(2,iloc,k) 
-     $                            ,polymer%pos(3,iloc,k) 
-            enddo
-          close(iqm)
-          enddo
-        endif
         call write_qm_inputs(polymer,istep,nbeadsloc,nloc)
         call launch_qm_software(nbeadsloc, nloc) 
         call get_gradient_from_qm(nbeadsloc,nloc)
 !$acc wait
+!$acc serial
         ibeadbeg=polymer%ibead_beg(rank_polymer+1)
         DO k=1,nbeadsloc  
           DO iloc=1,nloc 
@@ -168,9 +154,17 @@ ccc!$acc parallel loop collapse(3) async default(present)
               polymer%forces(j,i,k+ibeadbeg-1) = gradient_qm(i,j)
             ENDDO  
           ENDDO 
-!$acc update device(polymer%forces)
         ENDDO
+!$acc end serial
+!$acc update host(polymer%forces)
+        call organized_qm_files
       endif
+
+      write(*,*) 'IN BAOABPI'
+        DO k=1,nbeadsloc; DO iloc=1,nloc ; DO j=1,3
+          i=glob(iloc)
+          write(*,*) polymer%forces(j,i,k+ibeadbeg-1) 
+        ENDDO ; ENDDO ; ENDDO
 
 cc
 cc      !! ADD CENTROID CONTRIBUTION TO ENERGY AND FORCES !!

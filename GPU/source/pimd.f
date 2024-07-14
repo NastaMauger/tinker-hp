@@ -414,10 +414,6 @@ c
         if (abort) call fatal
       end do
 
-        if (aiMD) then
-          call organized_qm_files(nstep)
-        endif
-
 c     perform any final tasks before program exit
 c
       call final

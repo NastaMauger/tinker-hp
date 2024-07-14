@@ -140,10 +140,11 @@ c
       real(r_p), allocatable :: pos(:,:,:)
       integer :: i,k
       integer :: ios, iostat
-      integer :: iqm, freeunit
+      integer :: iqm, iqm_xyz, freeunit
       logical :: copy_file
       character*400 line
       character*240 filename
+      character*240 filename_xyz
       character*4 :: atom_name
 
       compteur_aimd = istep
@@ -162,6 +163,16 @@ c
      $              ,k ,'.inp'
           open(iqm, file=filename, status='unknown',
      $            action='write')
+          if(register_coord) then
+            iqm_xyz = freeunit()
+            write(filename_xyz, '(A,I0.3,A)') 'coordinates_beads'
+     $              ,k ,'.xyz'
+            open(iqm_xyz, file=filename_xyz, status='unknown',
+     $      action='write', position='append')
+            write(iqm_xyz,'(I0)') nloc
+            write(iqm_xyz,'(A,I0)') 'Coordinates for istep = ', istep
+          endif
+          
           do
             read(415,'(A)', iostat=ios) line
             if (ios /= 0) exit
@@ -184,10 +195,20 @@ c
      $                              ,polymer%pos(1,iloc,k) 
      $                              ,polymer%pos(2,iloc,k) 
      $                              ,polymer%pos(3,iloc,k) 
+                if(register_coord) then
+                  write(iqm_xyz, '(A,F18.12,1X, F18.12,1X,F18.12)') 
+     $                               atoms_name(iloc)
+     $                              ,polymer%pos(1,iloc,k) 
+     $                              ,polymer%pos(2,iloc,k) 
+     $                              ,polymer%pos(3,iloc,k) 
+                endif
               enddo
               write(iqm,'(A)') '*'
               close(415)
               close(iqm)
+              if (register_coord) then
+                close(iqm_xyz)
+              endif
             endif
   
             if(copy_file) then
@@ -714,39 +735,40 @@ c      endif
       end subroutine get_gradient_from_qm
 
 
-      subroutine organized_qm_files(nstep)
+      subroutine organized_qm_files
       implicit none
       integer :: i
-      integer :: nstep
+      integer :: compteur_save
       character*240  command_1
       character*240  command_2
       character*240  command_2b
       character*240  command_3
       character*240  command_3b
-      character*40 nstep_str
+      character*40 compteur_save_str
 
+      if(compteur_aimd .ge. 2) then
+        compteur_save = compteur_aimd - 1
+      else if(compteur_aimd  == 1) then
+        compteur_save = 0
+      endif
 
-      do i=0,nstep
-        write(nstep_str, '(I10)') i
-        command_1= 'mkdir -p  timestep_' // trim(adjustl(nstep_str))
-        call execute_command_line(command_1)
-        if(i==0) then
-          write(command_2, '(A, A, A)') 'mv orca_', 
-     $      trim(adjustl(nstep_str)), '.*'
-          write(command_2b, '(A, A, A)') 'mv orca_', 
-     $      trim(adjustl(nstep_str)), '_*'
-            command_3b = trim(adjustl(command_2b)) // ' timestep_' //
-     $      trim(adjustl(nstep_str))
-            call execute_command_line(command_3b)
-        else 
-          write(command_2, '(A, A, A)') 'mv orca_', 
-     $      trim(adjustl(nstep_str)), '_beads*'
-        endif
-        command_3 = trim(adjustl(command_2)) // ' timestep_' //
-     $      trim(adjustl(nstep_str))
+      write(compteur_save_str, '(I10)') compteur_save
+
+      command_1= 'mkdir -p  timestep_' // 
+     $                trim(adjustl(compteur_save_str))
+      call execute_command_line(command_1)
+
+      if (compteur_aimd .ge. 2) then
+        write(command_2, '(A, A, A)') 'mv orca_', 
+     $      trim(adjustl(compteur_save_str)), '_beads*'
+      elseif (compteur_aimd == 1) then
+        write(command_2, '(A, A, A)') 'mv orca_', 
+     $      trim(adjustl(compteur_save_str)), '*'
+      endif
+
+      command_3 = trim(adjustl(command_2)) // ' timestep_' //
+     $      trim(adjustl(compteur_save_str))
       call execute_command_line(command_3)
-      enddo
-c
       
       end subroutine organized_qm_files
       
