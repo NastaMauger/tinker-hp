@@ -1,4 +1,4 @@
-c
+
 c     Sorbonne University
 c     Washington University in Saint Louis
 c     University of Texas at Austin
@@ -22,7 +22,7 @@ c
       logical :: software_found
       logical qm_input_file_found
       logical qm_grad_file_found
-      real(r_p), allocatable :: gradient_qm(:,:)
+      real(r_p), allocatable :: gradient_qm_t(:,:,:)
       real :: energy_qm
       logical :: orca_qm, g16_qm, psi4_qm, pyscf_qm, qchem_qm
 
@@ -132,13 +132,15 @@ c
 
 
       subroutine write_qm_inputs(polymer,istep,nbeadsloc,nloc) 
+      use atomsMirror
       use beads
+      use domdec
       implicit none
       type(POLYMER_COMM_TYPE), intent(inout) :: polymer
       integer :: nbeadsloc, iloc, nloc
       integer, intent(in) :: istep
       real(r_p), allocatable :: pos(:,:,:)
-      integer :: i,k
+      integer :: i,k,iglob
       integer :: ios, iostat
       integer :: iqm, iqm_xyz, freeunit
       logical :: copy_file
@@ -190,14 +192,21 @@ c
               enddo
               copy_file = .false.
               do iloc=1,nloc
+                iglob=glob(iloc)
+cc                if (iloc /= iglob) then
+cc                  write(*,*) 'ERROR IGLOB / ILOC'
+cc                  write(*,*) 'iglob,iloc', iglob,iloc
+cc                endif
                 write(iqm, '(A,F18.12,1X, F18.12,1X,F18.12)') 
      $                               atoms_name(iloc)
+c     $                              ,x(iglob), y(iglob), z(iglob)
      $                              ,polymer%pos(1,iloc,k) 
      $                              ,polymer%pos(2,iloc,k) 
      $                              ,polymer%pos(3,iloc,k) 
                 if(register_coord) then
                   write(iqm_xyz, '(A,F18.12,1X, F18.12,1X,F18.12)') 
      $                               atoms_name(iloc)
+c     $                              ,x(iglob), y(iglob), z(iglob)
      $                              ,polymer%pos(1,iloc,k) 
      $                              ,polymer%pos(2,iloc,k) 
      $                              ,polymer%pos(3,iloc,k) 
@@ -219,112 +228,112 @@ c
         enddo
       endif
         
-      if (qm_input_file_found  .and.
-     $        g16_qm) then
-        open(unit=415, file=qm_input_filename, action='read')
-        open(unit=416 + compteur_aimd, file='g16_1_beads.inp'
-     $                , action='write', status='replace')
-        do
-          read(415,'(A)', iostat=ios) line
-          if (ios /= 0) exit
-
-          if(index(line, ',') /=0 ) then
-            write(416 + compteur_aimd ,'(A)') trim(line)
-            copy_file = .false.
-          endif
-  
-          if(copy_file) then
-            write(416 + compteur_aimd ,'(A)') trim(line)
-          endif
-
-        enddo
-        close(415)
-        close(416 + compteur_aimd)
-      endif
-        
-      if (qm_input_file_found  .and.
-     $        psi4_qm) then
-        open(unit=415, file=qm_input_filename, action='read')
-        open(unit=416 + compteur_aimd, file='psi4_1_beads.inp'
-     $                , action='write', status='replace')
-        do
-          read(415,'(A)', iostat=ios) line
-          if (ios /= 0) exit
-
-          if(index(line, 'molecule') /=0 ) then
-            write(416 + compteur_aimd ,'(A)') trim(line)
-            copy_file = .false.
-          endif
-  
-          if(copy_file) then
-            write(416 + compteur_aimd ,'(A)') trim(line)
-          endif
-
-          if (index(line, '}') /= 0) then
-            copy_file = .true.
-          endif
-
-        enddo
-        close(415)
-        close(416 + compteur_aimd)
-      endif
-    
-        
-      if (qm_input_file_found  .and.
-     $        pyscf_qm) then
-        open(unit=415, file=qm_input_filename, action='read')
-        open(unit=416 + compteur_aimd, file='pyscf_1_beads.inp'
-     $                , action='write', status='replace')
-        write(*,*) 'NEED QM WRITER FOR PYSCF - NOT IMPLEMENTED YET'
-        call fatal
-        do
-          read(415,'(A)', iostat=ios) line
-          if (ios /= 0) exit
-
-          if(index(line, 'molecule') /=0 ) then
-            write(416 + compteur_aimd ,'(A)') trim(line)
-            copy_file = .false.
-          endif
-  
-          if(copy_file) then
-            write(416 + compteur_aimd ,'(A)') trim(line)
-          endif
-
-          if (index(line, '$end') /= 0) then
-            copy_file = .true.
-          endif
-
-        enddo
-        close(415)
-        close(416 + compteur_aimd)
-      endif
-
-      if (qm_input_file_found  .and.
-     $        qchem_qm) then
-        open(unit=415, file=qm_input_filename, action='read')
-        open(unit=416 + compteur_aimd, file='qchem_1_beads.inp'
-     $                , action='write', status='replace')
-        do
-          read(415,'(A)', iostat=ios) line
-          if (ios /= 0) exit
-
-          if(index(line, 'molecule') /=0 ) then
-            write(416 + compteur_aimd ,'(A)') trim(line)
-            copy_file = .false.
-          endif
-  
-          if(copy_file) then
-            write(416 + compteur_aimd ,'(A)') trim(line)
-          endif
-
-          if (index(line, '$end') /= 0) then
-            copy_file = .true.
-          endif
-
-        enddo
-        close(415)
-        close(416 + compteur_aimd)
-      endif
+c      if (qm_input_file_found  .and.
+c     $        g16_qm) then
+c        open(unit=415, file=qm_input_filename, action='read')
+c        open(unit=416 + compteur_aimd, file='g16_1_beads.inp'
+c     $                , action='write', status='replace')
+c        do
+c          read(415,'(A)', iostat=ios) line
+c          if (ios /= 0) exit
+c
+c          if(index(line, ',') /=0 ) then
+c            write(416 + compteur_aimd ,'(A)') trim(line)
+c            copy_file = .false.
+c          endif
+c  
+c          if(copy_file) then
+c            write(416 + compteur_aimd ,'(A)') trim(line)
+c          endif
+c
+c        enddo
+c        close(415)
+c        close(416 + compteur_aimd)
+c      endif
+c        
+c      if (qm_input_file_found  .and.
+c     $        psi4_qm) then
+c        open(unit=415, file=qm_input_filename, action='read')
+c        open(unit=416 + compteur_aimd, file='psi4_1_beads.inp'
+c     $                , action='write', status='replace')
+c        do
+c          read(415,'(A)', iostat=ios) line
+c          if (ios /= 0) exit
+c
+c          if(index(line, 'molecule') /=0 ) then
+c            write(416 + compteur_aimd ,'(A)') trim(line)
+c            copy_file = .false.
+c          endif
+c  
+c          if(copy_file) then
+c            write(416 + compteur_aimd ,'(A)') trim(line)
+c          endif
+c
+c          if (index(line, '}') /= 0) then
+c            copy_file = .true.
+c          endif
+c
+c        enddo
+c        close(415)
+c        close(416 + compteur_aimd)
+c      endif
+c    
+c        
+c      if (qm_input_file_found  .and.
+c     $        pyscf_qm) then
+c        open(unit=415, file=qm_input_filename, action='read')
+c        open(unit=416 + compteur_aimd, file='pyscf_1_beads.inp'
+c     $                , action='write', status='replace')
+c        write(*,*) 'NEED QM WRITER FOR PYSCF - NOT IMPLEMENTED YET'
+c        call fatal
+c        do
+c          read(415,'(A)', iostat=ios) line
+c          if (ios /= 0) exit
+c
+c          if(index(line, 'molecule') /=0 ) then
+c            write(416 + compteur_aimd ,'(A)') trim(line)
+c            copy_file = .false.
+c          endif
+c  
+c          if(copy_file) then
+c            write(416 + compteur_aimd ,'(A)') trim(line)
+c          endif
+c
+c          if (index(line, '$end') /= 0) then
+c            copy_file = .true.
+c          endif
+c
+c        enddo
+c        close(415)
+c        close(416 + compteur_aimd)
+c      endif
+c
+c      if (qm_input_file_found  .and.
+c     $        qchem_qm) then
+c        open(unit=415, file=qm_input_filename, action='read')
+c        open(unit=416 + compteur_aimd, file='qchem_1_beads.inp'
+c     $                , action='write', status='replace')
+c        do
+c          read(415,'(A)', iostat=ios) line
+c          if (ios /= 0) exit
+c
+c          if(index(line, 'molecule') /=0 ) then
+c            write(416 + compteur_aimd ,'(A)') trim(line)
+c            copy_file = .false.
+c          endif
+c  
+c          if(copy_file) then
+c            write(416 + compteur_aimd ,'(A)') trim(line)
+c          endif
+c
+c          if (index(line, '$end') /= 0) then
+c            copy_file = .true.
+c          endif
+c
+c        enddo
+c        close(415)
+c        close(416 + compteur_aimd)
+c      endif
 
       end subroutine write_qm_inputs
 
@@ -392,6 +401,7 @@ c
 
 
       subroutine get_gradient_from_qm(nbeadsloc, nloc)
+      use atmtyp, only: mass
       use units
       implicit none
       integer :: i,j,k,iostat
@@ -399,7 +409,7 @@ c
       integer :: number_atoms
       logical :: found_energy, found_gradient, found_atoms
       integer iqm, freeunit
-      real(r_p), allocatable :: grad(:,:)
+      real(r_p), allocatable :: gradient_qm(:,:)
       integer :: nbeadsloc, iloc, nloc
       character*40 energy_str 
       character*3 :: k_str
@@ -469,7 +479,9 @@ c            iqm = freeunit()
               read(iqm,'(A)', iostat=iostat) line
               read(iqm,'(A)', iostat=iostat) line
               read(line,*) number_atoms
-              found_atoms=.true.  
+              if(number_atoms .eq. nloc) then
+                found_atoms=.true.  
+              endif
 
             else if (index(line, 'current gradient in') /= 0 .and. 
      $            .not. found_gradient) then
@@ -478,22 +490,37 @@ c            iqm = freeunit()
               endif
               allocate(gradient_qm(number_atoms,3))
               read(iqm,'(A)', iostat=iostat) line
-              read(iqm,'(A)', iostat=iostat) line
               do i=1, number_atoms
+                read(iqm,'(A)', iostat=iostat) line
                 read(line,*) gradient_qm(i,1) 
-                gradient_qm(i,1) = gradient_qm(i,1) * hartree / bohr
+                gradient_qm(i,1) = (gradient_qm(i,1) * hartree / bohr)
                 read(iqm,'(A)', iostat=iostat) line
                 read(line,*) gradient_qm(i,2)
-                gradient_qm(i,2) = gradient_qm(i,2) * hartree / bohr
+                gradient_qm(i,2) = (gradient_qm(i,2) * hartree / bohr)
                 read(iqm,'(A)', iostat=iostat) line
                 read(line,*) gradient_qm(i,3) 
-                gradient_qm(i,3) = gradient_qm(i,3) * hartree / bohr
+                gradient_qm(i,3) = (gradient_qm(i,3) * hartree / bohr)
               enddo
               found_gradient=.true.
 
             endif
           enddo
           close(iqm)
+
+          if(found_gradient) then
+            if(allocated(gradient_qm_t)) then
+              deallocate(gradient_qm_t)
+            endif
+            allocate(gradient_qm_t(3, nloc, nbeadsloc))
+            do k=1,nbeadsloc
+              do i=1,nloc
+                gradient_qm_t(1,i,k)=gradient_qm(i,1)
+                gradient_qm_t(2,i,k)=gradient_qm(i,2)
+                gradient_qm_t(3,i,k)=gradient_qm(i,3)
+              enddo
+            enddo
+          endif
+        
 
 c         else if(g16_qm) then
 c           open(426, file=qm_grad_filename, status='old')
@@ -719,18 +746,26 @@ c
         call fatal()
       endif
 
-c      if (found_energy) then
-c      endif
-c      if (found_atoms) then
-c        write(*,*) 'NUMBER OF ATOMS = ', number_atoms
-c      endif
-      if (found_gradient) then
-           write(*,*) 'Gradient values:'
-           do i = 1, number_atoms 
-               write(*,'(A,I3,3F16.9)') 'Atom', i, gradient_qm(i, 1), 
-     $                gradient_qm(i, 2), gradient_qm(i, 3)
-           enddo
-      endif
+cc      if (found_atoms) then
+cc        write(*,*) 'NUMBER OF ATOMS = ', nloc
+cc      endif
+cc      if (found_gradient) then
+cc        write(*,*) 'Gradient values in engrad:'
+cc        do i = 1, nloc
+cc          write(*,'(A,I3,3F16.9)') 'Atom', i, gradient_qm(i, 1), 
+cc     $                gradient_qm(i, 2), gradient_qm(i, 3)
+cc        enddo
+cc        write(*,*) 'Gradient values in transpose:'
+cc        do k=1,nbeadsloc
+cc          write(*,*) 'beads = ', k
+cc          do i=1,nloc
+cc            do j=1,3
+cc              print*,j,i,k,gradient_qm_t(j,i,k) 
+cc            enddo
+cc          enddo
+cc        enddo
+cc        write(*,*) ' '
+cc      endif
 
       end subroutine get_gradient_from_qm
 

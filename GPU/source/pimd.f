@@ -34,7 +34,6 @@ c      call MPI_INIT_THREAD(MPI_THREAD_MULTIPLE,nthreadsupport,ierr)
       end
 c
       subroutine pimd_bis
-      use abinitio
       use atomsMirror
       use bath
       use beads

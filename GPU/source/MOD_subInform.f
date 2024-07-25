@@ -209,6 +209,7 @@ c
       integer i
       real(8) val
       mi=huge(mi);ma=tiny(ma);on=0
+      ma=-mi
 !$acc wait
 !$acc parallel loop async present(vector(1:sz))
       do i = 1, sz
@@ -247,6 +248,7 @@ c
       integer i
       real(r_p) val
       mi=huge(mi);ma=tiny(ma);on=0
+      ma=-mi
 !$acc wait
 !$acc parallel loop async present(vector(1:sz))
       do i = 1, sz

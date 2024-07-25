@@ -257,6 +257,8 @@ c
          call add_forces1( derivs )
       end if
 
+cc    call gradient_qm_t(derivs) 
+
       ! Apply colvars
       if (use_colvars) call colvars_run(derivs)
 

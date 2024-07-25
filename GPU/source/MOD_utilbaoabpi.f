@@ -52,13 +52,6 @@ c
 
       nu=polymer%nbeads
       ilocbeg = ilocpi_beg(rank_polymer+1)
-!$acc wait
-!$acc update self(polymer%eigforces)
-      write(*,*) 'POLYMER FORCES IN B STEP'
-      do k=1,nu; do iloc=1,nlocpi; do j=1,3
-        i=glob(iloc+ilocbeg-1)
-        write(*,*) polymer%eigforces(j,i,k)
-      enddo; enddo; enddo
 !$acc parallel loop collapse(3) default(present) async
       do k=1,nu; do iloc=1,nlocpi; do j=1,3
         i=glob(iloc+ilocbeg-1)
@@ -1749,5 +1742,4 @@ c
       end subroutine pscalepi
 
       end module utilbaoabpi
-
 
