@@ -163,6 +163,24 @@ c
             polymer%forces_slow(j,iglob,ibead)=aalt(j,iglob)*wt
           enddo
         enddo
+
+        if(aiMD) then
+!$acc wait
+          compteur_aimd = 0
+          call qm_filename()
+          call launch_qm_software()
+          call get_gradient_from_qm()
+          do i=1,n
+            iglob=glob(i)
+            do j=1,3
+                polymer%forces(j,iglob,ibead)=-gradient_qm_t(j,i)
+            enddo
+          enddo
+!$acc update device(polymer%forces)
+        endif
+
+
+        
 c
 c     check for any prior dynamics coordinate sets
 c
@@ -193,7 +211,7 @@ c
         nprior = i - 1
       enddo
 
-      if(restart .and. .not. aiMD) then
+      if(restart) then
 !$acc parallel loop default(present) async
         do iglob=1,n
           x(iglob)=0.d0
@@ -219,28 +237,11 @@ c
         call update_nlocpi(nloc)
       endif
 
-      if(aiMD .and. .not. restart) then
-!$acc wait
-        compteur_aimd =0
-        call launch_qm_software(nbeadsloc, nloc)
-        call get_gradient_from_qm(nbeadsloc, nloc)
-        do ibead = 1, nbeads
-          do i=1,n
-            iglob=glob(i)
-            do j=1,3
-              polymer%forces(j,iglob,ibead)=
-     $                   -(gradient_qm_t(j,iglob,1))
-          enddo
-        enddo
-!$acc update device(polymer%forces)
-        enddo
-      endif
-        
       call comm_for_normal_modes(polymer,polymer%pos
      &   ,polymer%vel,polymer%forces,polymer%forces_slow )
       call update_normal_modes_pi(polymer)
 
-      if(aiMD .and. .not. restart) then
+      if(aiMD) then
         call set_eigforces_pi(polymer,polymer%forces)
       endif
 

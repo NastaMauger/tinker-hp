@@ -23,7 +23,6 @@ c
 #include "tinker_precision.h"
       
       subroutine baoabpi(istep,dt)
-      use abinitio
       use atomsMirror
       use atmtyp
       use beads
@@ -62,10 +61,9 @@ c
       real(r_p) :: dt2,sqrtnu,factor1,factor2
       real(r_p) :: scale,eigx0,eigv0,a1,a2
       integer :: nnoise,iloc,iqtb
+      real(r_p) :: gammak,nuratio     
       integer :: ilocbeg,ilocend,ibeadbeg
       logical :: only_long
-      character*240 filename
-      integer :: iqm, freeunit
 
       if(istep==1) then
 !$acc enter data create(eslow,vir_ctr) async
@@ -96,7 +94,7 @@ c
       if(PITIMER) call stopwatchpi(timecom,.false.,.false.)
 
       !!! COMPUTE FORCES ON CENTROID!!!  
-      if(centroid_recip .and. .not. aiMD) then
+      if(centroid_recip) then
         call prmem_requestm(derivs_centroid,3,nbloc,async=.TRUE.)
         call load_bead(polymer,0)
         only_long = centroid_longrange .and.
@@ -114,55 +112,33 @@ c
         if (deb_Atom)   call info_minmax_pva
       endif
 
-      if(.not. aiMD) then
-        !!! COMPUTE FORCES ON BEADS!!!  
-        call prmem_requestm(derivs,3,nbloc,nbeadsloc,async=.true.)
-        call compute_grad_beads(epotpi,derivs,virpi,polymer
+      !!! COMPUTE FORCES ON BEADS!!!  
+      call prmem_requestm(derivs,3,nbloc,nbeadsloc,async=.true.)
+      call compute_grad_beads(epotpi,derivs,virpi,polymer
      &         ,.not. (centroid_longrange .or. contract)  !LONG 
      &         ,.not. contract ! INT
      &         , .TRUE.     !SHORT 
      &         ,polar_allbeads)
-  
-        if(PITIMER) call stopwatchpi(timegrad,.false.,.false.)
-        if(.not.(centroid_recip .or. contract))
+
+      if(PITIMER) call stopwatchpi(timegrad,.false.,.false.)
+      if(.not.(centroid_recip .or. contract))
      &    call commforcesrecpi(derivs,derivsRec,nbeadsloc)
-        call commforcesblocpi(derivs,nbeadsloc,.FALSE.)  
-  
-        ibeadbeg=polymer%ibead_beg(rank_polymer+1)
-!$acc parallel loop collapse(3) async default(present)
-        DO k=1,nbeadsloc; DO iloc=1,nloc ; DO j=1,3
-          i=glob(iloc)
-          polymer%forces(j,i,k+ibeadbeg-1) = -derivs(j,iloc,k)
-        ENDDO ; ENDDO ; ENDDO
-      endif
+      call commforcesblocpi(derivs,nbeadsloc,.FALSE.)  
 
-
-      if (aiMD) then 
-!$acc wait
-!$acc update host(polymer%pos)
-        call write_qm_inputs(polymer,istep,nbeadsloc,nloc)
-        call launch_qm_software(nbeadsloc, nloc) 
-        call get_gradient_from_qm(nbeadsloc, nloc)
-        ibeadbeg=polymer%ibead_beg(rank_polymer+1)
+      ibeadbeg=polymer%ibead_beg(rank_polymer+1)
 !$acc parallel loop collapse(3) async default(present)
-cc        print*, 'Polymer%forces in baoabpi.f'
-        DO k=1,nbeadsloc; DO iloc=1,nloc ; DO j=1,3
-          i=glob(iloc)
-cc          print '(3i7,2f12.6)',j,iloc,k, polymer%forces(j,i,k+ibeadbeg-1
-cc     $             ),gradient_qm_t(j,iloc,k)
-cc          print '(3i7,2f12.6)',j,iloc,k
-cc     $             ,gradient_qm_t(j,iloc,k)
-          polymer%forces(j,i,k+ibeadbeg-1)=-gradient_qm_t(j,iloc,k)
-        ENDDO ; ENDDO ; ENDDO
-          call organized_qm_files
-      endif
+      DO k=1,nbeadsloc; DO iloc=1,nloc ; DO j=1,3
+        i=glob(iloc)
+        polymer%forces(j,i,k+ibeadbeg-1) = -derivs(j,iloc,k)
+      ENDDO ; ENDDO ; ENDDO
+
       call minmaxone(polymer%pos,3*nloc,'pos') 
       call minmaxone(polymer%vel,3*nloc,'vel') 
       call minmaxone(polymer%forces,3*nloc,'force') 
 cc      call minmaxone(derivs,3*nloc,'am') 
 
       !! ADD CENTROID CONTRIBUTION TO ENERGY AND FORCES !!
-      if(centroid_recip .and. .not. aiMD) then 
+      if(centroid_recip) then 
         if(rank_polymer==0) then
 !$acc serial async present(epotpi,eslow,vir_ctr,virpi)
           epotpi = epotpi + eslow
@@ -184,7 +160,7 @@ cc      call minmaxone(derivs,3*nloc,'am')
       if(PITIMER) call stopwatchpi(timecom,.true.,.false.)
 
       !!! COMPUTE FORCES ON  CONTRACTED BEADS!!!  
-      if(contract .and. nbeads_ctr>1 .and. .not. aiMD) then
+      if(contract .and. nbeads_ctr>1) then
 
         call prmem_requestm(derivs_ctr,3,nbloc
      &      ,nbeadsloc_ctr,async=.true.)

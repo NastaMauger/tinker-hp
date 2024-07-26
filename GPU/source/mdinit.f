@@ -98,6 +98,7 @@ c
       real(r_p) temper
       end function
       end interface
+
 c
 c     set default parameters for the dynamics trajectory
 c
@@ -293,6 +294,10 @@ c          call upcase (volscale)
           call getword(record,pl_output,next)
         case ('AIMD')
           aiMD = .true.
+c         NEED OLIVER CHECK
+          ftot_l=.false.
+c          write(*,*) 'FTOT_L = ', ftot_l
+c         NEED OLIVIER CHECK
           call read_aimd_keys
         end select
 
@@ -301,7 +306,6 @@ c          call upcase (volscale)
      &         ," not correctly read!"
         endif
       end do
-
 
 c
 c     enforce the use of monte-carlo barostat with the TCG family of solvers
@@ -926,6 +930,7 @@ c
      &                          * real(samplevec(3*(i-1)+j),r_p)
                      a(j,iglob) = -convert * derivs(j,i) / mass(iglob)
                      aalt(j,iglob) = a(j,iglob)
+                      print*, j,iglob, v(j,iglob), a(j,iglob)
                   else
                      v(j,iglob)    = 0.0_re_p
                      a(j,iglob)    = 0.0_re_p
@@ -958,6 +963,25 @@ c
                   end do
                end if
             end do
+
+            if(aiMD) then
+              compteur_aimd = 0
+              call qm_filename()
+              call launch_qm_software()
+              call get_gradient_from_qm()
+              write(*,*) 'in mdinit.f'
+              do i=1,nloc
+                iglob=glob(i)
+                  do j=1,3
+                    derivs(j,i) = gradient_qm_t(j,i)
+                    a(j,iglob) = -convert * derivs(j,i) 
+     $                      / mass(iglob)
+                    print*,j,iglob, derivs(j,i), gradient_qm_t(j,i)
+                  enddo
+              enddo
+            endif
+
+
 !$acc update device(v,a,aalt)
          end if
 !$acc end data

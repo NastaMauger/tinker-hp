@@ -63,6 +63,7 @@ c
       end subroutine
 
       subroutine mdstat (istep,dt,etot,epot,ekin,temp,pres)
+      use abinitio
       use sizes
       use atoms
       use bound
@@ -215,28 +216,40 @@ c
            end if
         end if
         if (verbose) then
-           if (modstep .eq. 1) then
-              if (use_bounds .and. integrate.ne.'STOCHASTIC') then
-                 write(iout,'(A)',advance="no") 
+          if (modstep .eq. 1) then
+            if (use_bounds .and. integrate.ne.'STOCHASTIC') then
+              if(.not. aiMD) then
+                write(iout,'(A)',advance="no") 
      &                         "     MD Step"
      &                       //"     E total"
      &                       //"   E Potential"            
      &                       //"     E Kinetic"
      &                       //"       Temp"
-                 if(use_virial) then
+                if(use_virial) then
                    write(iout,'(A)',advance="no") 
      &                         "       Pres"
-                 endif
-c                 if(isobaric) then
-c                   write(iout,'(A)',advance="no") 
+                endif
+c               if(isobaric) then
+c                 write(iout,'(A)',advance="no") 
 c     &                         "     Density"
 c     &                       //"      Volume"
-c                 endif
-                 write(iout,*)
-              end if
+c               endif
+              endif
+              if(aiMD) then
+                write(iout,'(A)',advance="no") 
+     &                         "     MD Step"
+     &                       //"     E total"
+     &                       //"   E Potential"            
+     &                       //"     E Kinetic"
+     &                       //"       Temp"
+     &                       //"     QM Energy (a.u)"
+              endif
+              write(iout,*)
+            end if
            end if
            if (display) then
            if  (use_bounds .and. integrate.ne.'STOCHASTIC') then
+            if(.not. aiMD) then
 !$acc wait
                write(iout,'(i10,3'//f_ener//',f11.2)',advance="no")
      &             istep,etot,epot,ekin,temp
@@ -246,7 +259,14 @@ c                 endif
                !if(isobaric) then
                !  write(iout,'(f12.4,f12.2)',advance="no") dens,volbox
                !endif
-               write(iout,*)
+            endif
+            if(aiMD) then
+!$acc wait
+               write(iout,'(i10,3'//f_ener//',f11.2,9X,f11.5)'
+     &                   ,advance="no")
+     &             istep,etot,epot,ekin,temp, energy_qm
+            endif
+           write(iout,*)
            else
 !$acc wait
               write (iout,'(i10,3f14.4,f11.2)')  
