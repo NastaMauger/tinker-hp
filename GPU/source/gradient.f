@@ -63,21 +63,25 @@ c
       real(t_p), allocatable, save :: wgrp_save(:,:)
 
       if (aiMD) then
-        if(compteur_aimd .ge. 1) then
-          call qm_filename()
-          call write_qm_inputs
+        if(first_in_gradient) then
+          goto 11 
+        else
+          create_qm_file = .true.
           call launch_qm_software()
           call get_gradient_from_qm()
-cc          derivs(:,:)=gradient_qm_t(:,:)
-          do i=1,n
-            iglob=glob(i) 
-            do j=1,3
-              derivs(j,iglob)=gradient_qm_t(j,iglob)
-              print*,j,iglob,derivs(j,iglob)
-            enddo
-          enddo
+          derivs(:,:)=gradient_qm_t(:,:)
+cc          do i=1,n
+cc            iglob=glob(i) 
+cc            do j=1,3
+cc              derivs(j,iglob)=gradient_qm_t(j,iglob)
+cc              print*,j,iglob,derivs(j,iglob)
+cc            enddo
+cc          enddo
         endif
       else
+
+   11 continue
+
         if (first_in_gradient) then
            first_in_gradient=.false.
         end if

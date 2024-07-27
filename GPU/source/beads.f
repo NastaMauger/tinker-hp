@@ -405,23 +405,6 @@
       integer :: i,j,k,ibead,iloc,ilocbeg,ilocend,nu
       real(r_p) :: sqrtnuinv
 
-cc!$acc wait
-cc!$acc update self(polymer%eigforces)
-cc        nu=polymer%nbeads
-cc        sqrtnuinv = 1./sqrt(real(nu,r_p))
-cc        ilocbeg=ilocpi_beg(rank_polymer+1)
-cc        ilocend=ilocpi_end(rank_polymer+1)      
-cc        write(*,*) 'IN SET EIGFORCES BEG'
-cc        DO k=1,nu; DO iloc=ilocbeg,ilocend ; DO j=1,3
-cc          i=glob(iloc)
-cc          write(*,*) polymer%eigforces(j,i,k)
-cc        ENDDO ; ENDDO ; ENDDO 
-cc        write(*,*) 'IN SET FORCES BEG'
-cc        DO k=1,nu; DO iloc=ilocbeg,ilocend ; DO j=1,3
-cc          i=glob(iloc)
-cc          write(*,*) polymer%forces(j,i,k)
-cc        ENDDO ; ENDDO ; ENDDO 
-
         if (deb_Path) then
 !$acc wait
           write(*,*) '   >> set_eigforces_pi'

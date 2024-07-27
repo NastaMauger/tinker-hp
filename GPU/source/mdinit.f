@@ -294,9 +294,9 @@ c          call upcase (volscale)
           call getword(record,pl_output,next)
         case ('AIMD')
           aiMD = .true.
+          create_qm_file = .false.
 c         NEED OLIVER CHECK
           ftot_l=.false.
-c          write(*,*) 'FTOT_L = ', ftot_l
 c         NEED OLIVIER CHECK
           call read_aimd_keys
         end select
@@ -964,20 +964,17 @@ c
                end if
             end do
 
-            if(aiMD) then
-              compteur_aimd = 0
-              call qm_filename()
+            if(aiMD .and. .not.exist) then
+              create_qm_file = .false.
               call launch_qm_software()
               call get_gradient_from_qm()
-              write(*,*) 'in mdinit.f'
               do i=1,nloc
                 iglob=glob(i)
-                  do j=1,3
-                    derivs(j,i) = gradient_qm_t(j,i)
-                    a(j,iglob) = -convert * derivs(j,i) 
+                do j=1,3
+                  derivs(j,i) = gradient_qm_t(j,i)
+                  a(j,iglob) = -convert * derivs(j,i) 
      $                      / mass(iglob)
-                    print*,j,iglob, derivs(j,i), gradient_qm_t(j,i)
-                  enddo
+                enddo
               enddo
             endif
 
@@ -1019,6 +1016,21 @@ c
             inquire (file=dynfile,exist=exist)
          end if
       end do
+
+cc      if(exist .and. aiMD) then
+cc        create_qm_file = .true.
+cc        call launch_qm_software()
+cc        call get_gradient_from_qm()
+cc        do i=1,nloc
+cc          iglob=glob(i)
+cc          do j=1,3
+cc            derivs(j,i) = gradient_qm_t(j,i)
+cc            a(j,iglob) = -convert * derivs(j,i) 
+cc     $                / mass(iglob)
+cc          enddo
+cc        enddo
+cc      endif
+        
       nprior = i - 1
 
 c

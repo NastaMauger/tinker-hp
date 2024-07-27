@@ -166,20 +166,16 @@ c
 
         if(aiMD) then
 !$acc wait
-          compteur_aimd = 0
-          call qm_filename()
-          call launch_qm_software()
-          call get_gradient_from_qm()
+          create_qm_file = .false.
           do i=1,n
             iglob=glob(i)
             do j=1,3
-                polymer%forces(j,iglob,ibead)=-gradient_qm_t(j,i)
+              polymer%forces(j,iglob,ibead)=-gradient_qm_t(j,i)
+cc              print*,j,iglob, ibead, polymer%forces(j,iglob,ibead)
             enddo
           enddo
 !$acc update device(polymer%forces)
         endif
-
-
         
 c
 c     check for any prior dynamics coordinate sets
@@ -235,7 +231,22 @@ c
         call allocstep
         call nblist(0)
         call update_nlocpi(nloc)
+
+cc        if(aiMD) then
+cc          create_qm_file = .true. !Better be safe than sorry
+cc          call launch_qm_software()
+cc          call get_gradient_from_qm()
+cc              do j=1,3
+cc          do iglob=1,n
+cc                polymer%forces(j,iglob,ibead)=-gradient_qm_t(j,i)
+cc                print*,j,iglob,ibead,polymer%forces(j,iglob,ibead)
+cc            enddo
+cc          enddo
+cc          call fatal
+cc        endif
+
       endif
+    
 
       call comm_for_normal_modes(polymer,polymer%pos
      &   ,polymer%vel,polymer%forces,polymer%forces_slow )

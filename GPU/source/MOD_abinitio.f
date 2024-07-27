@@ -18,6 +18,7 @@ c
       implicit none
 
       logical :: aiMD=.false.
+      logical :: create_qm_file
       logical :: register_coord
       logical :: software_found
       logical qm_init_file_found
@@ -29,21 +30,16 @@ c
 
       integer :: nprocs
 
-      integer :: compteur_aimd = 0
-
       character*40 filename_orca
       character*40 filename_g16 
       character*40 filename_psi4
       character*40 filename_pyscf
       character*40 filename_qchem
-      character*40 qm_init_filename
+
       character*40 qm_input_filename
       character*40 qm_output_filename
       character*40 qm_grad_filename
-
-      character*40 compteur_aimd_str
-      character*1, allocatable :: atoms_name(:)
-
+      character*40 qm_coord_filename
 
       contains
 
@@ -132,28 +128,6 @@ c
 
       end subroutine read_aimd_keys
 
-
-      subroutine qm_filename()
-      implicit none
-      
-      write(compteur_aimd_str, '(I10)') compteur_aimd
-
-      if (orca_qm == .true.) then
-        qm_input_filename = 'orca_'
-     $        // trim(adjustl(compteur_aimd_str)) // '.inp'
-        if (compteur_aimd .eq. 0) then
-          qm_init_filename = qm_input_filename
-        endif
-        qm_output_filename = 'orca_'
-     $        // trim(adjustl(compteur_aimd_str)) // '.out'
-        qm_grad_filename = 'orca_'
-     $      // trim(adjustl(compteur_aimd_str)) // '.engrad'
-      endif
-
-      end subroutine qm_filename
-      
-
-
       subroutine write_qm_inputs() 
       use atomsMirror
       use atmtyp
@@ -163,34 +137,31 @@ c
       integer :: i,k,iglob
       integer :: ios, iostat
       integer :: iqm, iqm_xyz, freeunit
+      integer :: compteur_aimd = 1
       logical :: copy_file
       character*400 line
-      character*240 filename
-      character*240 filename_xyz
+      character*240 filename_temp
 
-      write(compteur_aimd_str, '(I10)') compteur_aimd
-
-      inquire(file=qm_init_filename, exist=qm_init_file_found)
-      if(.NOT. qm_init_file_found) then
-        write(*,*) 'NEED INITAL QM INPUT FILE'
-      endif
-      if (qm_init_file_found  .and. orca_qm) then
-        copy_file=.true.
-        iqm = freeunit()
-        open(unit=415, file=qm_init_filename, action='read'
+      filename_temp = 'orca.inp_temp'
+      copy_file=.true.
+      iqm = freeunit()
+      open(unit=415, file=qm_input_filename, action='read'
      $              ,status='old')
-        write(qm_input_filename, '(A,I0.3,A,I0.3,A)') 'orca_'
-     $        // trim(adjustl(compteur_aimd_str)) // '.inp'
-        open(iqm, file=qm_input_filename, status='unknown',
+      open(iqm, file=filename_temp, status='unknown',
      $            action='write')
         if(register_coord) then
           iqm_xyz = freeunit()
-           write(filename_xyz, '(A,I0.3,A)') 'coordinates.xyz'
-           open(iqm_xyz, file=filename_xyz, status='unknown',
+          open(iqm_xyz, file=qm_coord_filename, status='unknown',
      $            action='write', position='append')
-           write(iqm_xyz,'(I0)') n
-           write(iqm_xyz,'(A,I0)') 'Coordinates for istep = ', 
+          write(iqm_xyz,'(I0)') n
+          write(iqm_xyz,'(A,I0)') 'Coordinates for istep = ', 
      $                compteur_aimd
+          do i=1,n
+            iglob=glob(i)
+            write(iqm_xyz, '(A,F18.12,1X, F18.12,1X,F18.12)') 
+     $           name(iglob),x(iglob), y(iglob), z(iglob)
+            enddo
+          compteur_aimd = compteur_aimd + 1
         endif
           
         do
@@ -203,28 +174,24 @@ c
             do i=1,n
               iglob=glob(i)
               write(iqm, '(A,F18.12,1X, F18.12,1X,F18.12)') 
-     $                 name(iglob)
-     $                 ,x(iglob), y(iglob), z(iglob)
-              if(register_coord) then
-                write(iqm_xyz, '(A,F18.12,1X, F18.12,1X,F18.12)') 
-     $                 name(iglob)
-     $                 ,x(iglob), y(iglob), z(iglob)
-              endif
+     $                 name(iglob),x(iglob), y(iglob), z(iglob)
             enddo
             write(iqm,'(A)') '*'
-            close(415)
+            close(415,status='delete')
             close(iqm)
-            if (register_coord) then
-              close(iqm_xyz)
-            endif
+            call rename(filename_temp,qm_input_filename)
+          endif
+
+          if(register_coord) then
+            close(iqm_xyz)
           endif
   
           if(copy_file) then
             write(iqm,'(A)') trim(line)
           endif
         enddo
-      endif
-        
+
+
 c      if (qm_input_file_found  .and.
 c     $        g16_qm) then
 c        open(unit=415, file=qm_input_filename, action='read')
@@ -336,8 +303,25 @@ c      endif
 
 
       subroutine launch_qm_software()
+      use inform
       implicit none
       character*240  command
+
+      if(app_id .eq. pimd_a) then  
+        write(*,*) 'TEST PIMD'
+        call fatal()
+      else
+        qm_input_filename  = 'orca.inp'
+        qm_output_filename = 'orca.out'
+        qm_grad_filename   = 'orca.engrad'
+        if(register_coord) then
+          qm_coord_filename = 'coordinates.xyz'
+        endif
+      endif
+
+      if(create_qm_file) then
+        call write_qm_inputs
+      endif
 
       inquire(file=qm_input_filename, exist=qm_input_file_found)
       if(.not. qm_input_file_found) then
@@ -369,8 +353,6 @@ cc      integer :: line_length, pos, pos_start, pos_end
       real(r_p), allocatable :: gradient_qm(:,:)
       character*40 energy_str 
       character*400 line
-
-      write(compteur_aimd_str, '(I10)') compteur_aimd
 
       found_energy = .false.
       found_atoms = .false.
@@ -658,73 +640,29 @@ c        close(429)
 c        
         endif
       else
-        write(*,*) 'NO QM OUTPUT GRADIENT FILE FOUND'
+        write(*,*) 'NO QM GRADIENT FILE FOUND'
         call fatal()
       endif
 
 cc      if (found_atoms) then
 cc        write(*,*) 'NUMBER OF ATOMS = ', nloc
 cc      endif
-      if (found_gradient) then
+cc      if (found_gradient) then
 cc        write(*,*) 'Gradient values in engrad:'
 cc        do i = 1, n
 cc          write(*,'(A,I3,3F16.9)') 'Atom', i, gradient_qm(i, 1), 
 cc     $                gradient_qm(i, 2), gradient_qm(i, 3)
 cc        enddo
-        write(*,*) 'Gradient values in transpose:'
-        do i=1,nloc
-          do j=1,3
-            print*,j,i,gradient_qm_t(j,i) 
-          enddo
-        enddo
-        write(*,*) ' '
-      endif
-
-cc      write(*,*) qm_input_filename, qm_output_filename
-cc      write(*,*) qm_grad_filename
-cc      WRITE(*,*) qm_init_filename
-
-      compteur_aimd = compteur_aimd + 1
+cc        write(*,*) 'Gradient values in transpose:'
+cc        do i=1,nloc
+cc          do j=1,3
+cc            print*,j,i,gradient_qm_t(j,i) 
+cc          enddo
+cc        enddo
+cc        write(*,*) ' '
+cc      endif
 
       end subroutine get_gradient_from_qm
 
-
-      subroutine organized_qm_files
-      implicit none
-      integer :: i
-      integer :: compteur_save
-      character*240  command_1
-      character*240  command_2
-      character*240  command_2b
-      character*240  command_3
-      character*240  command_3b
-      character*40 compteur_save_str
-
-      if(compteur_aimd .ge. 2) then
-        compteur_save = compteur_aimd - 1
-      else if(compteur_aimd  == 1) then
-        compteur_save = 0
-      endif
-
-      write(compteur_save_str, '(I10)') compteur_save
-
-      command_1= 'mkdir -p  timestep_' // 
-     $                trim(adjustl(compteur_save_str))
-      call execute_command_line(command_1)
-
-      if (compteur_aimd .ge. 2) then
-        write(command_2, '(A, A, A)') 'mv orca_', 
-     $      trim(adjustl(compteur_save_str)), '_beads*'
-      elseif (compteur_aimd == 1) then
-        write(command_2, '(A, A, A)') 'mv orca_', 
-     $      trim(adjustl(compteur_save_str)), '*'
-      endif
-
-      command_3 = trim(adjustl(command_2)) // ' timestep_' //
-     $      trim(adjustl(compteur_save_str))
-      call execute_command_line(command_3)
-      
-      end subroutine organized_qm_files
-      
       end module abinitio
 
