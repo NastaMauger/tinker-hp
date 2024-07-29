@@ -21,20 +21,13 @@ c
       logical :: create_qm_file
       logical :: register_coord
       logical :: software_found
-      logical qm_init_file_found
       logical qm_input_file_found
       logical qm_grad_file_found
+      logical :: orca_qm, g16_qm, psi4_qm, pyscf_qm, qchem_qm
       real(r_p), allocatable :: gradient_qm_t(:,:)
       real :: energy_qm
-      logical :: orca_qm, g16_qm, psi4_qm, pyscf_qm, qchem_qm
 
       integer :: nprocs
-
-      character*40 filename_orca
-      character*40 filename_g16 
-      character*40 filename_psi4
-      character*40 filename_pyscf
-      character*40 filename_qchem
 
       character*40 qm_input_filename
       character*40 qm_output_filename
@@ -54,9 +47,6 @@ c
       character*240 :: string
       character*240 :: xyzfile
       integer :: next,i, ios
-
-
-
 c
 c     set default values for AIMD simulations
 c
@@ -95,19 +85,14 @@ c
           call upcase(value)
           if (value .eq. 'ORCA') then
             orca_qm = .true.
-            write(*, *) 'AIMD with ORCA software.'
           elseif (value .eq. 'GAUSSIAN') then
             g16_qm = .true.
-            write(*, *) 'AIMD with GAUSSIAN software.'
           elseif (value .eq. 'PSI4') then
             psi4_qm = .true.
-            write(*, *) 'AIMD with PSI4 software.'
           elseif (value .eq. 'PYSCF') then
             pyscf_qm = .true.
-            write(*, *) 'AIMD with PYSCF software.'
           elseif (value .eq. 'QCHEM') then
             qchem_qm = .true.
-            write(*, *) 'AIMD with QCHEM software.'
           else
             write(*, *) 'Unknown QM software: ', trim(value)
             call fatal
@@ -128,16 +113,86 @@ c
 
       end subroutine read_aimd_keys
 
-      subroutine write_qm_inputs() 
+
+      subroutine qm_inputs_name_gen() 
+      use inform
       use atomsMirror
       use atmtyp
       use beads
       use domdec
       implicit none
+      integer :: k
+      integer iqm, freeunit
+      integer :: ios, iostat
+      character*40 qm_init_filename
+      character*400 line
+      character*3 :: k_beads
+
+      qm_input_filename  = 'orca.inp'
+      qm_output_filename = 'orca.out'
+      qm_grad_filename   = 'orca.engrad'
+      if(register_coord) then
+        qm_coord_filename = 'coordinates.xyz'
+      endif
+
+      inquire(file=qm_input_filename, exist=qm_input_file_found)
+      if(.not. qm_input_file_found) then
+        write(*,*) 'NO QM INPUT FILE FOUND'
+        call fatal()
+      endif
+
+      if(app_id .eq. pimd_a) then  
+        if(create_qm_file) then
+c       This part of the code allows to have as many QM inputs as beads
+c       before going in write_qm_inputs. Hence these inputs are the same
+c       than the one given by the user at the beginning of the simulation
+          qm_init_filename   = 'orca.inp'
+          open(unit=415, file=qm_init_filename, action='read'
+     $              ,status='old')
+          do k=1,nbeads
+            write(k_beads,'(I3.3)') k
+            qm_input_filename  = 'orca_beads' 
+     $              //trim(adjustl(k_beads)) //'.inp'
+            iqm = freeunit()
+            open(unit=iqm, file=qm_input_filename, status='unknown',
+     $            action='write')
+            rewind(415)
+            do while(.true.)
+              read(415,'(A)', iostat=ios) line
+              if (ios /= 0) exit
+              write(iqm, '(A)') trim(line)
+            enddo
+            close(iqm)
+            qm_output_filename = 'orca_beads' 
+     $              //trim(adjustl(k_beads)) //'.out'
+            qm_grad_filename   = 'orca_beads' 
+     $              //trim(adjustl(k_beads)) //'.engrad'
+            if(register_coord) then
+              qm_coord_filename = 'coordinates_beads' 
+     $              //trim(adjustl(k_beads))//'.xyz'
+            endif
+            close(415)
+            call write_qm_inputs
+            go to 14
+          enddo
+        endif
+      endif
+
+      call write_qm_inputs
+
+   14 continue
+      
+      end subroutine qm_inputs_name_gen
+
+      subroutine write_qm_inputs() 
+      use atomsMirror
+      use atmtyp
+      use domdec
+      implicit none
       integer :: i,k,iglob
       integer :: ios, iostat
       integer :: iqm, iqm_xyz, freeunit
-      integer :: compteur_aimd = 1
+      integer :: compteur_aimd = 0
       logical :: copy_file
       character*400 line
       character*240 filename_temp
@@ -303,30 +358,10 @@ c      endif
 
 
       subroutine launch_qm_software()
-      use inform
       implicit none
       character*240  command
 
-      if(app_id .eq. pimd_a) then  
-        write(*,*) 'TEST PIMD'
-        call fatal()
-      else
-        qm_input_filename  = 'orca.inp'
-        qm_output_filename = 'orca.out'
-        qm_grad_filename   = 'orca.engrad'
-        if(register_coord) then
-          qm_coord_filename = 'coordinates.xyz'
-        endif
-      endif
-
-      if(create_qm_file) then
-        call write_qm_inputs
-      endif
-
-      inquire(file=qm_input_filename, exist=qm_input_file_found)
-      if(.not. qm_input_file_found) then
-        write(*,*) 'NO QM INPUT FILE FOUND'
-      endif
+      call qm_inputs_name_gen()
 
       if (orca_qm .and. qm_input_file_found) then
         command='$(which orca) ' // qm_input_filename // '> '

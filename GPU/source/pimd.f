@@ -34,6 +34,7 @@ c      call MPI_INIT_THREAD(MPI_THREAD_MULTIPLE,nthreadsupport,ierr)
       end
 c
       subroutine pimd_bis
+      use abinitio
       use atomsMirror
       use bath
       use beads
@@ -335,6 +336,10 @@ c
 
       if(ranktot==0) then
         write(iout,*)
+        if(aiMD) then
+          write(iout, '(A)') 
+     &     '                     Ab - initio'
+        endif
         write(iout,'(A)') 
      &     ' Path Integral MD trajectory via the '
      &      //trim(integrate)//' algorithm'

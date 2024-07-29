@@ -429,15 +429,6 @@
           write(*,*) '   << set_eigforces_pi'
         endif
 
-cc!$acc wait
-cc!$acc update self(polymer%eigforces)
-cc        write(*,*) 'IN SET EIGFORCES END'
-cc        DO k=1,nu; DO iloc=ilocbeg,ilocend ; DO j=1,3
-cc          i=glob(iloc)
-cc          write(*,*) polymer%eigforces(j,i,k)
-cc        ENDDO ; ENDDO ; ENDDO 
-  
-
       end subroutine set_eigforces_pi
 
       module subroutine update_direct_space_pi(polymer)
@@ -768,6 +759,7 @@ cc        ENDDO ; ENDDO ; ENDDO
       gyrpi=0.d0
 !$acc end serial  
 
+
       ilocbeg = ilocpi_beg(rank_polymer+1)
 !$acc parallel loop collapse(3) async default(present)
       DO k=1,nu; DO iloc=1,nlocpi ; DO j=1,3
@@ -801,8 +793,6 @@ cc        ENDDO ; ENDDO ; ENDDO
         end if
         endif
       ENDDO ; ENDDO ; ENDDO  
-
-
 
       if(nu==1) then
 !$acc serial async

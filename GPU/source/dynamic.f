@@ -34,6 +34,7 @@ c      call MPI_INIT_THREAD(MPI_THREAD_MULTIPLE,nthreadsupport,ierr)
       end
 c
       subroutine dynamic_bis
+      use abinitio
       use ani
       use atoms
       use bath
@@ -271,6 +272,10 @@ c
 c
 c     print out a header line for the dynamics computation
 c
+      if(aiMD) then
+          write(iout, '(A)') 
+     &     '                     Ab - initio'
+      endif
       if (integrate .eq. 'VERLET') then
          if (rank.eq.0) write (iout,330)
   330    format (/,' Molecular Dynamics Trajectory via',

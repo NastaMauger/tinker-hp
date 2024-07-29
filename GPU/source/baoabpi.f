@@ -23,6 +23,7 @@ c
 #include "tinker_precision.h"
       
       subroutine baoabpi(istep,dt)
+      use abinitio
       use atomsMirror
       use atmtyp
       use beads
@@ -119,6 +120,14 @@ c
      &         ,.not. contract ! INT
      &         , .TRUE.     !SHORT 
      &         ,polar_allbeads)
+
+c     This allows to have all coordinates before launching QM software
+c     using MPI processes.
+cc      if((app_id .eq. pimd_a) .and. (nbeads .gt. 1)) then
+cc        if(aiMD) then
+cc          write(*,*) 'I AM IN BAOABPI WITH AIMD AND MORE THAN 1 BEAD'
+cc        endif
+cc      endif
 
       if(PITIMER) call stopwatchpi(timegrad,.false.,.false.)
       if(.not.(centroid_recip .or. contract))

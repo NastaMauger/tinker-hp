@@ -27,6 +27,7 @@ c
       use atoms
       use atmlst
       use atmtyp
+      use beads
       use bitor
       use cell
       use colvars
@@ -38,7 +39,7 @@ c
       use group
       use inter
       use iounit
-      use inform    ,only:abort,minmaxone,deb_Force
+      use inform    
       use ktrtor
       use mpi
       use pitors
@@ -67,6 +68,11 @@ c
           goto 11 
         else
           create_qm_file = .true.
+          if((app_id .eq. pimd_a) .and. (nbeads .gt. 1)) then
+c           If there is more than one bead, it prints all coordinates 
+c           to be able to launch QM software using MPI processes
+            goto 12 
+          endif
           call launch_qm_software()
           call get_gradient_from_qm()
           derivs(:,:)=gradient_qm_t(:,:)
@@ -340,5 +346,6 @@ c
               call info_energy(0)
            end if
         end if
+   12 continue
       endif
       end

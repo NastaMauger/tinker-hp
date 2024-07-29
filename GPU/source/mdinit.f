@@ -295,9 +295,9 @@ c          call upcase (volscale)
         case ('AIMD')
           aiMD = .true.
           create_qm_file = .false.
-c         NEED OLIVER CHECK
+cc         NEED OLIVER CHECK
           ftot_l=.false.
-c         NEED OLIVIER CHECK
+cc         NEED OLIVIER CHECK
           call read_aimd_keys
         end select
 
@@ -930,7 +930,6 @@ c
      &                          * real(samplevec(3*(i-1)+j),r_p)
                      a(j,iglob) = -convert * derivs(j,i) / mass(iglob)
                      aalt(j,iglob) = a(j,iglob)
-                      print*, j,iglob, v(j,iglob), a(j,iglob)
                   else
                      v(j,iglob)    = 0.0_re_p
                      a(j,iglob)    = 0.0_re_p
@@ -939,6 +938,19 @@ c
                end do
             end do
 !$acc end data
+            if(aiMD .and. .not.exist) then
+              create_qm_file = .false.
+              call launch_qm_software()
+              call get_gradient_from_qm()
+              do i=1,nloc
+                iglob=glob(i)
+                do j=1,3
+                  derivs(j,i) = gradient_qm_t(j,i)
+                  a(j,iglob) = -convert * derivs(j,i) 
+     $                      / mass(iglob)
+                enddo
+              enddo
+            endif
             deallocate(speedvec)
          end if
 #endif
@@ -963,7 +975,6 @@ c
                   end do
                end if
             end do
-
             if(aiMD .and. .not.exist) then
               create_qm_file = .false.
               call launch_qm_software()
@@ -977,8 +988,6 @@ c
                 enddo
               enddo
             endif
-
-
 !$acc update device(v,a,aalt)
          end if
 !$acc end data

@@ -191,7 +191,7 @@ c            endif
 c     &                    //"     Ek prim"
      &                    //"       Temp"
      &                    //"    Temp_cl"
-     &                    //"     QM Energy (a.u)"
+     &                    //"     | QM Energy (a.u)"
             endif
             write(iout,*)
           endif
@@ -208,9 +208,10 @@ c              write(iout,'(f12.4,f12.2)',advance="no") dens,volbox
 c            endif
             endif
             if(aiMD) then
-         write(iout,'(i10,3'//f_ener//',2f11.2,9X, f11.5)',advance="no")
+         write(iout,'(i10,3'//f_ener//',2f11.2,5X,A,5X,f11.5)'
+     &                  ,advance="no")
      &                 istep,ekvir+epotpi,epotpi,ekvir !,ekprim
-     &                 ,temppi,temppi_cl/nbeads, energy_qm
+     &                 ,temppi,temppi_cl/nbeads, '|',energy_qm
             endif
               write(iout,*)
           endif

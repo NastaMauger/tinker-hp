@@ -242,7 +242,7 @@ c               endif
      &                       //"   E Potential"            
      &                       //"     E Kinetic"
      &                       //"       Temp"
-     &                       //"     QM Energy (a.u)"
+     &                       //"     | QM Energy (a.u)"
               endif
               write(iout,*)
             end if
@@ -262,9 +262,9 @@ c               endif
             endif
             if(aiMD) then
 !$acc wait
-               write(iout,'(i10,3'//f_ener//',f11.2,9X,f11.5)'
+               write(iout,'(i10,3'//f_ener//',f11.2,5X,A,5X,f11.5)'
      &                   ,advance="no")
-     &             istep,etot,epot,ekin,temp, energy_qm
+     &             istep,etot,epot,ekin,temp,'|', energy_qm
             endif
            write(iout,*)
            else
